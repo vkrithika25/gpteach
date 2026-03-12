@@ -20,32 +20,32 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <ResizablePanelGroup direction="horizontal" className="min-h-0">
           {/* Left Panel - Spec Viewer */}
-          <ResizablePanel defaultSize={25} minSize={20}>
+          <ResizablePanel defaultSize={25} minSize={20} className="min-h-0 overflow-hidden">
             <SpecViewer />
           </ResizablePanel>
 
           <ResizableHandle />
 
           {/* Middle Panel - Canvas */}
-          <ResizablePanel defaultSize={40} minSize={30}>
+          <ResizablePanel defaultSize={40} minSize={30} className="min-h-0 overflow-hidden">
             <DiagramCanvas />
           </ResizablePanel>
 
           <ResizableHandle />
 
           {/* Right Panel - Calendar and Chat */}
-          <ResizablePanel defaultSize={35} minSize={25}>
-            <ResizablePanelGroup direction="vertical">
-              <ResizablePanel defaultSize={40} minSize={30}>
+          <ResizablePanel defaultSize={35} minSize={25} className="min-h-0 overflow-hidden">
+            <ResizablePanelGroup direction="vertical" className="min-h-0">
+              <ResizablePanel defaultSize={40} minSize={30} className="min-h-0 overflow-hidden">
                 <DeadlineCalendar />
               </ResizablePanel>
 
               <ResizableHandle />
 
-              <ResizablePanel defaultSize={60} minSize={40}>
+              <ResizablePanel defaultSize={60} minSize={40} className="min-h-0 overflow-hidden">
                 <ChatBot />
               </ResizablePanel>
             </ResizablePanelGroup>

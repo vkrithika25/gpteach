@@ -229,8 +229,8 @@ export function SpecViewer() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900" onClick={() => setSelectedAnnotation(null)}>
-      <div className="p-4 border-b border-zinc-800">
+    <div className="flex flex-col h-full min-h-0 bg-zinc-900" onClick={() => setSelectedAnnotation(null)}>
+      <div className="p-4 border-b border-zinc-800 shrink-0">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-zinc-100">Project Specification</h2>
           {annotations.length > 0 && (
@@ -242,7 +242,7 @@ export function SpecViewer() {
         </div>
       </div>
       
-      <div ref={specRef} className="flex-1 overflow-auto p-6 relative bg-zinc-900 text-zinc-100" onMouseUp={handleTextSelect}>
+      <div ref={specRef} className="flex-1 min-h-0 overflow-auto p-6 relative bg-zinc-900 text-zinc-100" onMouseUp={handleTextSelect}>
         <div className="max-w-3xl space-y-4">
           <h1 className="font-bold text-xl text-zinc-50">CS 401: Distributed Systems Project</h1>
           

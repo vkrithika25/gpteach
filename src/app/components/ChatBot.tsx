@@ -131,12 +131,12 @@ export function ChatBot() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900">
-      <div className="p-4 border-b border-zinc-800">
+    <div className="flex flex-col h-full min-h-0 bg-zinc-900">
+      <div className="p-4 border-b border-zinc-800 shrink-0">
         <h2 className="font-semibold text-zinc-100">Chat</h2>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4 bg-zinc-950">
+      <div className="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-zinc-950">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -207,7 +207,7 @@ export function ChatBot() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-zinc-800 bg-zinc-900">
+      <div className="p-4 border-t border-zinc-800 bg-zinc-900 shrink-0">
         <div className="flex gap-2">
           <Textarea
             placeholder="Ask me anything about your project..."

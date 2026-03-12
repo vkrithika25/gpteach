@@ -143,8 +143,8 @@ export function DeadlineCalendar() {
   const completedCount = deadlines.filter(d => d.completed).length;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900">
-      <div className="p-4 border-b border-zinc-800">
+    <div className="flex flex-col h-full min-h-0 bg-zinc-900">
+      <div className="p-4 border-b border-zinc-800 shrink-0">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-zinc-100">Project Timeline</h2>
           <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export function DeadlineCalendar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-3 bg-zinc-900">
+      <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3 bg-zinc-900">
         {isAddingNew && (
           <Card className="p-3 bg-zinc-800 border-zinc-700">
             <div className="space-y-2">
