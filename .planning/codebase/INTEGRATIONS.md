@@ -1,50 +1,42 @@
 # External Integrations
 
-**Analysis Date:** 2025-05-13
+**Analysis Date:** 2025-05-14
 
 ## APIs & External Services
 
-**Chat Service (Simulated):**
-- Mock implementation: `src/app/components/ChatBot.tsx`
-  - Logic: Client-side keyword-based responses with simulated delays.
-  - SDK/Client: Custom React hooks and `setTimeout`.
+**Chat Service:**
+- Internal Mock - `src/app/components/ChatBot.tsx` contains hardcoded response logic based on keyword matching. No external LLM (OpenAI, Anthropic, etc.) is currently integrated.
 
-**AI Feedback (Simulated):**
-- Mock implementation: `src/app/components/DiagramCanvas.tsx`
-  - Logic: Random selection from a hardcoded array of feedback strings.
-- Mock implementation: `src/app/components/SpecViewer.tsx`
-  - Logic: Random selection from a hardcoded array of response strings for annotations.
+**Figma Assets:**
+- Figma Integration - `vite.config.ts` includes a `figmaAssetResolver` plugin to resolve `figma:asset/` paths to local files in `src/assets`.
 
 ## Data Storage
 
-**Databases:**
-- None detected.
-- State management: `useState` (React) and local component states.
-- Persistence: None (data is lost on page refresh).
+**Local Persistence:**
+- Browser `localStorage` - Used to persist project data, including names and specifications.
+  - Implementation: `src/app/contexts/ProjectContext.tsx`
+  - Storage Key: `cs-tutor-projects`
 
 **File Storage:**
-- Local assets only (e.g., SVG as base64 in `src/app/components/figma/ImageWithFallback.tsx`).
-
-**Caching:**
-- Browser-native only.
+- Local filesystem only - Assets are stored in `src/assets/`.
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- Custom (Mock): No actual login or authentication system is currently implemented.
+- None detected. The application currently operates as a standalone tool with no user accounts or authentication.
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Custom fallback UI: `src/app/components/figma/ImageWithFallback.tsx` handles image loading errors.
+- None detected.
 
 **Logs:**
-- Console logging (if any).
+- Browser `console.log` for development.
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Not explicitly configured in the codebase. Standard static site deployment for Vite applications.
+- Not explicitly configured in the codebase (likely static hosting).
 
 **CI Pipeline:**
 - None detected.
@@ -52,19 +44,19 @@
 ## Environment Configuration
 
 **Required env vars:**
-- None detected in code.
+- None detected.
 
 **Secrets location:**
-- Not applicable.
+- Not detected. No `.env` or secret management in use.
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None.
+- None detected.
 
 **Outgoing:**
-- None.
+- None detected.
 
 ---
 
-*Integration audit: 2025-05-13*
+*Integration audit: 2025-05-14*

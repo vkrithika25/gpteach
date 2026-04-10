@@ -1,79 +1,79 @@
 # Technology Stack
 
-**Analysis Date:** 2025-05-13
+**Analysis Date:** 2025-05-14
 
 ## Languages
 
 **Primary:**
-- TypeScript 5.x - Used for all source code components and logic in `src/`.
-- TSX - Used for React components in `src/app/components/` and `src/app/App.tsx`.
+- TypeScript - Primary language for application logic and components.
 
 **Secondary:**
-- CSS - Used for styling in `src/styles/` including `tailwind.css` and `theme.css`.
+- CSS - Global styles and Tailwind overrides.
+- HTML - Base entry point `index.html`.
 
 ## Runtime
 
 **Environment:**
-- Node.js (Vite development server)
+- Browser - Client-side execution.
+- Node.js - Development and build environment.
 
 **Package Manager:**
-- pnpm 9.x (Based on `pnpm` override in `package.json`)
-- Lockfile: `package-lock.json` (Note: `package-lock.json` exists but `package.json` has `pnpm` configuration; might be a mixed environment or transitioning)
+- pnpm - Package manager (defined in `pnpm-workspace.yaml`).
+- Lockfile: `package-lock.json` (Note: package.json mentions pnpm, but a package-lock.json exists, suggesting npm might have been used or it's a hybrid setup).
 
 ## Frameworks
 
 **Core:**
-- React 18.3.1 - UI library used for the entire application.
-- Vite 6.x - Build tool and development server.
-- React Router 7.13.0 - Used for routing (installed, but currently simple SPA).
+- React 18.3.1 - Component-based UI library.
+- React Router 7.13.0 - Application routing.
 
-**UI Components:**
-- Radix UI - Primitive UI components (Accordion, Alert Dialog, Avatar, etc.) in `src/app/components/ui/`.
-- MUI Material & Icons 7.3.5 - Used for icons and some UI elements.
-- Lucide React 0.487.0 - Primary icon library.
-- Shadcn/UI (Pattern) - The codebase follows the shadcn/ui pattern for component organization in `src/app/components/ui/`.
+**UI & Styling:**
+- Tailwind CSS 4.1.12 - Styling framework.
+- Radix UI - Headless UI primitives (multiple `@radix-ui/react-*` packages).
+- MUI (Material UI) 7.3.5 - Component library and icons.
+- Lucide React 0.487.0 - Icon library.
+- Framer Motion (via `motion`) - Animation library.
+- Sonner - Toast notifications.
+- Vaul - Drawer components.
 
-**Styling:**
-- Tailwind CSS 4.1.12 - Utility-first CSS framework.
-- Emotion 11.x - CSS-in-JS library used primarily for MUI components.
+**Data & Utils:**
+- Recharts 2.15.2 - Charting and data visualization.
+- date-fns 3.6.0 - Date manipulation.
+- react-hook-form 7.55.0 - Form management.
+- react-dnd 16.0.1 - Drag and drop functionality.
+- cmdk 1.1.1 - Command menu primitive.
 
-**Charts & Data Visualization:**
-- Recharts 2.15.2 - Used for data visualization.
-
-**Animation:**
-- Motion 12.x - Used for animations and transitions.
+**Build/Dev:**
+- Vite 6.4.2 - Build tool and development server.
+- PostCSS - CSS processing.
 
 ## Key Dependencies
 
 **Critical:**
-- `react-hook-form` 7.55.0 - Form state management.
-- `vaul` 1.1.2 - Drawer component.
-- `sonner` 2.0.3 - Toast notifications.
-- `embla-carousel-react` 8.6.0 - Carousel functionality.
-- `date-fns` 3.6.0 - Date manipulation.
+- `react-router` - Handles navigation between project list and workspace.
+- `ProjectContext` - Custom context in `src/app/contexts/ProjectContext.tsx` for state management.
 
 **Infrastructure:**
-- `@tailwindcss/vite` 4.1.12 - Vite plugin for Tailwind CSS integration.
+- `@tailwindcss/vite` - Vite plugin for Tailwind CSS integration.
 
 ## Configuration
 
 **Environment:**
-- Configured via `vite.config.ts`.
-- No `.env` files detected in the root directory.
+- Browser-based - No server-side environment detected.
 
 **Build:**
-- `vite.config.ts` - Main build configuration.
-- `postcss.config.mjs` - PostCSS configuration for Tailwind.
-- `tsconfig.json` - TypeScript configuration.
+- `vite.config.ts` - Vite configuration with a custom `figmaAssetResolver` plugin.
+- `postcss.config.mjs` - PostCSS configuration.
+- `package.json` - Build scripts and dependency definitions.
 
 ## Platform Requirements
 
 **Development:**
-- Node.js environment with `pnpm` or `npm`.
+- Node.js and pnpm/npm.
 
 **Production:**
-- Standard static site hosting (Vercel, Netlify, GitHub Pages) or any environment capable of serving a SPA build output from `vite build`.
+- Static site hosting (e.g., Vercel, Netlify, GitHub Pages).
 
 ---
 
-*Stack analysis: 2025-05-13*
+*Stack analysis: 2025-05-14*

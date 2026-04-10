@@ -1,89 +1,92 @@
 # Codebase Concerns
 
-**Analysis Date:** 2025-02-26
+**Analysis Date:** 2025-02-13
 
 ## Tech Debt
 
-**Mock-heavy implementation:**
-- Issue: The core features of the application (AI chat, AI feedback on diagrams, AI annotations on specs) are currently implemented using hardcoded mock responses and `Math.random()`.
-- Files: `src/app/components/ChatBot.tsx`, `src/app/components/DiagramCanvas.tsx`, `src/app/components/SpecViewer.tsx`, `src/app/components/DeadlineCalendar.tsx`
-- Impact: The application is currently a static prototype/demo. None of the AI features actually work with a real LLM.
-- Fix approach: Integrate with an AI service (e.g., OpenAI, Anthropic) or a backend proxy that handles LLM calls.
+**Rule-based "AI" Simulation:**
+- Issue: The ChatBot, Diagram Canvas feedback, and Spec Viewer annotations use hardcoded rules or random mock responses instead of a real LLM integration.
+- Files: `src/app/components/ChatBot.tsx`, `src/app/components/DiagramCanvas.tsx`, `src/app/components/SpecViewer.tsx`
+- Impact: The core value proposition (AI tutoring) is simulated and non-functional for real-world scenarios.
+- Fix approach: Integrate with an LLM API (e.g., OpenAI, Anthropic) via a secure backend or client-side SDK.
 
-**Canvas State Management:**
-- Issue: `DiagramCanvas.tsx` uses `getImageData` and `putImageData` to preserve canvas content during window resizing. This is inefficient for large canvases and does not handle high-DPI (Retina) displays correctly.
-- Files: `src/app/components/DiagramCanvas.tsx`
-- Impact: Potential performance lag and blurry rendering on high-resolution screens.
-- Fix approach: Use an off-screen canvas to store drawing state or transition to a vector-based library (e.g., Konva, Fabric.js) or SVG.
+**Inconsistent State Persistence:**
+- Issue: Only projects and specs are persisted in `localStorage`. Chat history, diagrams, annotations, and deadlines are stored in component state and lost on refresh.
+- Files: `src/app/contexts/ProjectContext.tsx`, `src/app/components/SpecViewer.tsx`, `src/app/components/DiagramCanvas.tsx`, `src/app/components/DeadlineCalendar.tsx`
+- Impact: Poor user experience as progress is lost frequently.
+- Fix approach: Centralize state management and implement a robust persistence layer (e.g., IndexedDB or a backend database).
 
-**Monolithic UI Components:**
-- Issue: Several components are reaching high complexity with hundreds of lines of code and many `useState` hooks managing independent state.
-- Files: `src/app/components/SpecViewer.tsx` (469 lines), `src/app/components/DeadlineCalendar.tsx` (298 lines), `src/app/components/DiagramCanvas.tsx` (277 lines).
-- Impact: Increasing difficulty in maintenance, testing, and debugging.
-- Fix approach: Refactor into smaller sub-components and extract business logic into custom hooks (e.g., `useCanvas`, `useAnnotations`, `useChat`).
-
-## Known Bugs
-
-**Overlapping Highlights:**
-- Symptoms: The `renderTextWithHighlights` function in `SpecViewer.tsx` sorts annotations by start offset but does not explicitly handle cases where highlights might overlap or nest.
+**Fragile Annotation Selection:**
+- Issue: `SpecViewer` relies on calculated text offsets and `data-section-id` for annotations.
 - Files: `src/app/components/SpecViewer.tsx`
-- Trigger: Create two annotations that share some text characters.
-- Workaround: Avoid overlapping highlights.
+- Impact: Editing the project specification will likely shift text and break existing annotations or make them point to the wrong text.
+- Fix approach: Implement a more robust anchoring system for annotations (e.g., using unique IDs for segments or fuzzy matching).
 
 ## Security Considerations
 
-**Unprotected Environment Variables:**
-- Risk: While no real API keys are currently used, the project structure lacks a clear strategy for managing secrets when AI/backend integration is added.
-- Files: `package.json` (no `.env` management visible in scripts)
-- Current mitigation: None (only mock data used currently).
-- Recommendations: Add `dotenv` or ensure Vite environment variable patterns are followed (`VITE_*`) and `.env` files are properly gitignored.
+**Lack of Authentication:**
+- Risk: No user accounts or authentication. All data is stored in the browser's `localStorage` and is accessible to anyone using the same browser profile.
+- Files: `src/app/contexts/ProjectContext.tsx`
+- Current mitigation: None.
+- Recommendations: Implement a proper authentication system and store data in a secure per-user database.
+
+**Client-side Data Storage:**
+- Risk: Storing project specs and potential user-sensitive data in `localStorage` without encryption.
+- Files: `src/app/contexts/ProjectContext.tsx`
+- Current mitigation: None.
+- Recommendations: If staying client-side, consider encrypting sensitive data before storage.
 
 ## Performance Bottlenecks
 
-**Annotation Rendering:**
-- Problem: `renderTextWithHighlights` performs string manipulation and array mapping on every render for every section of the specification.
-- Files: `src/app/components/SpecViewer.tsx`
-- Cause: React component re-renders trigger expensive text processing.
-- Improvement path: Use `useMemo` to cache the rendered highlights based on the `annotations` and `text` content.
+**LocalStorage Size Limits:**
+- Problem: `localStorage` is typically limited to ~5MB. Large project specifications or many projects could exceed this limit.
+- Files: `src/app/contexts/ProjectContext.tsx`
+- Cause: Storing all project data as a JSON string in a single `localStorage` key.
+- Improvement path: Migrate to `IndexedDB` (via `dexie` or `idb`) for higher capacity and better performance with structured data.
+
+**Canvas Resize Handling:**
+- Problem: `DiagramCanvas` redrawing on resize might be inefficient or lose fidelity if the aspect ratio changes significantly.
+- Files: `src/app/components/DiagramCanvas.tsx`
+- Cause: Direct use of `getImageData` and `putImageData` without scaling logic.
+- Improvement path: Use a vector-based drawing approach or a library like `react-konva` or `fabric.js`.
 
 ## Fragile Areas
 
-**Text Selection Logic:**
+**Markdown Parsing Logic:**
 - Files: `src/app/components/SpecViewer.tsx`
-- Why fragile: Uses native `window.getSelection()` and `Range` APIs which can be inconsistent across browsers and are difficult to map back to React's virtual DOM structure reliably, especially when text is already wrapped in highlight tags.
-- Safe modification: Ensure tests are added for various selection scenarios (start/end in different nodes).
-- Test coverage: 0%
-
-**Canvas Resizing:**
-- Files: `src/app/components/DiagramCanvas.tsx`
-- Why fragile: The `updateCanvasSize` effect re-initializes context and attempts to restore state via `putImageData`, which is prone to race conditions and loss of state if the resize event isn't handled perfectly.
-- Safe modification: Move canvas sizing logic into a dedicated hook and use a more robust drawing state representation (e.g., an array of paths).
+- Why fragile: Uses simple regex-based line parsing for headings and lists instead of a full markdown parser.
+- Safe modification: Be careful when adding support for more markdown features (tables, code blocks, etc.).
+- Test coverage: None detected.
 
 ## Scaling Limits
 
-**No State Persistence:**
-- Current capacity: Memory-only (lost on refresh).
-- Limit: User loses all work (diagrams, annotations, chat history, deadlines) if the page is reloaded.
-- Scaling path: Integrate with local storage (browser) or a persistent database (PostgreSQL/Supabase/Firebase).
+**Single-User / Single-Device:**
+- Current capacity: One user per browser.
+- Limit: No synchronization across devices or collaboration features.
+- Scaling path: Implement a backend API with a database and user accounts.
 
 ## Missing Critical Features
 
-**Lack of Backend/API Integration:**
-- Problem: Entirely client-side with no networking.
-- Blocks: Collaborative features, persistent saving, real AI processing.
+**Undo/Redo in Canvas:**
+- Problem: No way to undo mistakes in the Diagram Canvas.
+- Blocks: Users from making complex diagrams easily.
 
-**Test Suite:**
-- Problem: No automated tests (unit, integration, or E2E).
-- Blocks: Confidence in refactoring and long-term stability.
+**Date Validation and Sorting:**
+- Problem: Deadlines use plain strings for dates.
+- Blocks: Automated sorting, notifications, or calendar integrations.
+
+**Chat History Per Project:**
+- Problem: Chat messages are global and not associated with a specific project.
+- Blocks: Context-aware assistance when switching between different projects.
 
 ## Test Coverage Gaps
 
-**Entire Codebase:**
-- What's not tested: Every component and utility.
-- Files: `src/**/*.tsx`, `src/**/*.ts`
-- Risk: Regressions are inevitable as the project grows; logic bugs in complex components like `SpecViewer` or `DiagramCanvas` will go unnoticed.
-- Priority: High
+**Context and Core Logic:**
+- What's not tested: `ProjectContext` state transitions, markdown parsing in `SpecViewer`, and deadline management logic.
+- Files: `src/app/contexts/ProjectContext.tsx`, `src/app/components/SpecViewer.tsx`, `src/app/components/DeadlineCalendar.tsx`
+- Risk: Regressions in project management or data corruption in `localStorage` might go unnoticed.
+- Priority: Medium
 
 ---
 
-*Concerns audit: 2025-02-26*
+*Concerns audit: 2025-02-13*

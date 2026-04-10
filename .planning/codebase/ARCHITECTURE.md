@@ -1,93 +1,109 @@
 # Architecture
 
-**Analysis Date:** 2025-02-14
+**Analysis Date:** 2025-03-05
 
 ## Pattern Overview
 
-**Overall:** Component-based Single Page Application (SPA)
+**Overall:** Client-side Single Page Application (SPA).
 
 **Key Characteristics:**
-- **Panel-based Layout:** Uses `react-resizable-panels` to create a multi-pane workspace (`src/app/App.tsx`).
-- **Component-Driven Development:** Each major feature (Chat, Canvas, Spec Viewer, Calendar) is encapsulated in its own component in `src/app/components/`.
-- **Local State Management:** Components primarily use React `useState` and `useRef` for internal state.
-- **AI-Augmented UX:** Features mocked AI interactions integrated directly into functional components (e.g., `SpecViewer.tsx`, `DiagramCanvas.tsx`, `ChatBot.tsx`).
+- **Component-Based UI:** Modular, reusable UI built with React components.
+- **Centralized State Management:** Global project data and application state managed via React Context.
+- **Client-Side Persistence:** Project data is persisted to the browser's `localStorage`.
+- **Responsive Workspace Layout:** Flexible, multi-panel interface using resizable panels.
 
 ## Layers
 
-**UI Layer:**
-- Purpose: Reusable, low-level UI primitives.
-- Location: `src/app/components/ui/`
-- Contains: Buttons, Cards, Inputs, Resizable panels, etc.
-- Depends on: `lucide-react` for icons, `clsx` and `tailwind-merge` for styling.
-- Used by: All feature components in `src/app/components/`.
-
-**Feature Layer:**
-- Purpose: High-level functional modules of the application.
+**Presentation Layer:**
+- Purpose: Renders the user interface and handles user interactions.
 - Location: `src/app/components/`
-- Contains: `ChatBot.tsx`, `DeadlineCalendar.tsx`, `DiagramCanvas.tsx`, `SpecViewer.tsx`.
-- Depends on: UI Layer.
-- Used by: `src/app/App.tsx`.
+- Contains: React components, hooks, and local UI state.
+- Depends on: UI components from `src/app/components/ui/` and global state from `src/app/contexts/`.
+- Used by: The root application in `src/app/App.tsx`.
 
-**Application Layer:**
-- Purpose: Root component and layout orchestration.
-- Location: `src/app/App.tsx`, `src/main.tsx`.
-- Contains: Layout structure and global styles.
-- Depends on: Feature Layer, UI Layer.
-- Used by: Browser/DOM.
+**State Management Layer:**
+- Purpose: Manages global application state and business logic related to projects.
+- Location: `src/app/contexts/`
+- Contains: `ProjectContext.tsx` providing project data and update functions.
+- Depends on: Browser `localStorage` for persistence.
+- Used by: Most presentation components to access or modify project data.
+
+**UI Library Layer:**
+- Purpose: Provides low-level, reusable UI primitives.
+- Location: `src/app/components/ui/`
+- Contains: Shadcn UI components (built on Radix UI).
+- Depends on: Tailwind CSS for styling and `lucide-react` for icons.
+- Used by: All components in the presentation layer.
 
 ## Data Flow
 
-**Internal Component Flow:**
+**Project Initialization:**
+1. `ProjectProvider` in `src/app/contexts/ProjectContext.tsx` initializes on mount.
+2. It attempts to load projects from `localStorage`.
+3. If no projects are found, it populates the state with default projects.
+4. The `projects` state is provided to the entire component tree.
 
-1. **User Interaction:** User interacts with a specific tool (e.g., selects text in `SpecViewer.tsx` or draws on `DiagramCanvas.tsx`).
-2. **State Update:** Component updates local state (e.g., `setAnnotations`, `setIsDrawing`).
-3. **AI Mocking:** Component triggers a mock AI response (e.g., `generateMockResponse` in `SpecViewer.tsx` or `getFeedback` in `DiagramCanvas.tsx`).
-4. **Re-render:** UI updates to reflect new state or AI feedback.
+**Project Workspace Interaction:**
+1. User selects a project from `ProjectList.tsx`, which navigates to `/project/:projectId`.
+2. `ProjectWorkspace.tsx` reads the `projectId` from the URL.
+3. It calls `setCurrentProject` from `ProjectContext` to set the active project.
+4. Workspace sub-components (`SpecViewer`, `DiagramCanvas`, etc.) consume the `currentProject` data from the context.
 
-**State Management:**
-- **Local State:** Heavily used for UI-specific data (drawing coordinates, chat messages, active selections).
-- **No Global Store:** Currently, there is no detected global state (e.g., Redux, Zustand) or Context API usage for cross-component communication.
+**Project Data Updates:**
+1. A component (e.g., `SpecViewer.tsx`) triggers an update via `updateProjectSpec` from `ProjectContext`.
+2. The context updates its internal `projects` state.
+3. An `useEffect` in the context detects the state change and persists the updated data to `localStorage`.
 
 ## Key Abstractions
 
-**Annotations:**
-- Purpose: Represents a user-added question and AI answer tied to a specific section of the specification.
-- Examples: `Annotation` interface in `src/app/components/SpecViewer.tsx`.
+**Project:**
+- Purpose: Represents the core data entity of the application.
+- Examples: Defined as an interface in `src/app/contexts/ProjectContext.tsx`.
+- Pattern: Simple data object with properties like `id`, `name`, `spec`, and timestamps.
 
-**Chat Messages:**
-- Purpose: Represents a conversation history between the user and the AI.
-- Examples: `ChatMessage` interface in `src/app/components/ChatBot.tsx`.
+**ProjectContext:**
+- Purpose: Acts as a central repository for project data and operations.
+- Examples: `src/app/contexts/ProjectContext.tsx`.
+- Pattern: Provider pattern using React Context and hooks (`useProjects`).
 
-**Deadlines:**
-- Purpose: Represents a project task with a due date and completion status.
-- Examples: `Deadline` interface in `src/app/components/DeadlineCalendar.tsx`.
+**Resizable Workspace:**
+- Purpose: Provides a flexible layout for multiple tools.
+- Examples: `src/app/components/ProjectWorkspace.tsx`.
+- Pattern: Uses `react-resizable-panels` to manage a multi-pane interface.
 
 ## Entry Points
 
 **Main Entry Point:**
 - Location: `src/main.tsx`
-- Triggers: Browser page load.
-- Responsibilities: Renders the `App` component into the root DOM element and imports global styles.
+- Triggers: Browser loading `index.html`.
+- Responsibilities: Renders the root `App` component into the DOM.
 
 **App Root:**
 - Location: `src/app/App.tsx`
 - Triggers: Rendered by `main.tsx`.
-- Responsibilities: Defines the high-level resizable layout and mounts the four main feature components.
+- Responsibilities: Wraps the application in `ProjectProvider` and sets up the `RouterProvider`.
+
+**Router Configuration:**
+- Location: `src/app/routes.tsx`
+- Triggers: `RouterProvider` in `App.tsx`.
+- Responsibilities: Defines mapping between URL paths and top-level components (`ProjectList`, `ProjectWorkspace`).
 
 ## Error Handling
 
-**Strategy:** Defensive programming and UI-level feedback.
+**Strategy:** Localized error handling within components and basic 404 routing.
 
 **Patterns:**
-- **Null Checks:** Used when accessing refs or context (e.g., `canvasRef.current`, `canvas.getContext('2d')` in `DiagramCanvas.tsx`).
-- **Input Validation:** Simple checks for empty strings before processing chat or deadline additions.
+- **404 Route:** A catch-all route in `src/app/routes.tsx` for undefined paths.
+- **Context Error:** A check in `useProjects` hook to ensure it's used within a provider.
+- **LocalStorage Error Handling:** Try-catch block in `ProjectContext.tsx` when parsing JSON from storage.
 
 ## Cross-Cutting Concerns
 
-**Logging:** Currently uses standard `console.log` (if any, though none was prominent in the core logic).
-**Validation:** Basic client-side validation for forms and inputs.
-**Authentication:** Not detected in the current scope.
+**Logging:** Uses standard `console.error` for persistence failures in `src/app/contexts/ProjectContext.tsx`.
+**Validation:** Basic ID-based checks in `ProjectWorkspace.tsx` to redirect if a project is not found.
+**Authentication:** Not currently implemented (application is local-only).
+**Styling:** Global styles managed through Tailwind CSS in `src/styles/` and component-level classes.
 
 ---
 
-*Architecture analysis: 2025-02-14*
+*Architecture analysis: 2025-03-05*

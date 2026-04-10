@@ -1,85 +1,18 @@
-# Testing Patterns
+# Testing Strategy
 
-**Analysis Date:** 2025-02-17
+## Current State
+- No automated tests (Unit, Integration, or E2E) are currently implemented in the codebase.
+- `package.json` does not contain any test scripts (e.g., `jest`, `vitest`, `cypress`).
 
-## Test Framework
+## Recommended Strategy
+1. **Unit Testing**: 
+   - Use **Vitest** for its fast execution and seamless integration with Vite.
+   - Focus on utility functions in `utils.ts` and complex logic within Contexts.
+2. **Component Testing**:
+   - Use **React Testing Library** for testing UI components in isolation, ensuring they render correctly and handle user interactions.
+3. **End-to-End (E2E) Testing**:
+   - Consider **Playwright** or **Cypress** for critical user flows, such as interacting with the ChatBot or managing projects.
 
-**Runner:**
-- **Not detected.** There is no test runner (like Vitest or Jest) configured in `package.json` or `vite.config.ts`.
-
-**Assertion Library:**
-- **Not detected.**
-
-**Run Commands:**
-```bash
-# No testing commands found in package.json
-```
-
-## Test File Organization
-
-**Location:**
-- **Not detected.** No test files (`.test.ts`, `.spec.ts`, etc.) were found in the `src/` directory.
-
-**Naming:**
-- Recommended: `[filename].test.tsx` or `[filename].spec.tsx` located alongside the source file.
-
-## Test Structure
-
-**Suite Organization:**
-```typescript
-// Recommended pattern for future use (using Vitest/React Testing Library)
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MyComponent } from './MyComponent';
-
-describe('MyComponent', () => {
-  it('renders correctly', () => {
-    render(<MyComponent />);
-    // expectations...
-  });
-});
-```
-
-## Mocking
-
-**Framework:** None.
-
-**What to Mock:**
-- External API calls (none currently implemented).
-- Complex canvas operations if needed for `DiagramCanvas.tsx`.
-
-## Fixtures and Factories
-
-**Test Data:**
-- Mock data currently exists inline within components (e.g., `defaultResponses` in `src/app/components/ChatBot.tsx`).
-
-**Location:**
-- Inline in components. Recommended to move to `src/tests/fixtures/` or similar.
-
-## Coverage
-
-**Requirements:** None enforced.
-
-## Test Types
-
-**Unit Tests:**
-- Recommended for utility functions like `cn` in `src/app/components/ui/utils.ts`.
-- Recommended for helper functions like `generateBotResponse` in `src/app/components/ChatBot.tsx`.
-
-**Integration Tests:**
-- Recommended for testing component interactions (e.g., sending a chat message and seeing the bot response).
-
-**E2E Tests:**
-- Not used.
-
-## Common Patterns
-
-**Async Testing:**
-- Recommended for testing the simulated bot typing delay in `ChatBot.tsx`.
-
-**Error Testing:**
-- Recommended for edge cases in text selection in `SpecViewer.tsx`.
-
----
-
-*Testing analysis: 2025-02-17*
+## Verification Workflow
+- Until automated tests are added, manual verification is required for all changes.
+- Ensure the application builds successfully (`npm run build`) before committing.

@@ -1,103 +1,103 @@
 # Codebase Structure
 
-**Analysis Date:** 2025-02-14
+**Analysis Date:** 2025-03-05
 
 ## Directory Layout
 
 ```
-[project-root]/
-├── src/                # Source code
-│   ├── app/            # Application logic and components
-│   │   ├── components/ # Functional modules (Chat, Canvas, etc.)
-│   │   │   ├── figma/  # Figma-related components (image fallbacks)
-│   │   │   └── ui/     # Reusable UI primitives (Shadcn/UI components)
-│   │   └── App.tsx     # Root application component and layout
-│   ├── main.tsx        # Application entry point
-│   └── styles/         # Global styles and configuration
-├── guidelines/         # Project documentation and guidelines
-├── package.json        # Dependencies and scripts
-├── tailwind.config.ts  # Tailwind CSS configuration (if present)
-├── tsconfig.json       # TypeScript configuration
-└── vite.config.ts      # Vite build configuration
+/
+├── .planning/           # Analysis and planning documents
+├── guidelines/          # Project guidelines
+├── public/              # Static assets (implicitly used by Vite)
+├── src/                 # Application source code
+│   ├── app/             # Application logic and components
+│   │   ├── components/  # React components
+│   │   │   ├── figma/   # Figma-specific utilities
+│   │   │   └── ui/      # Reusable UI primitives (Shadcn)
+│   │   ├── contexts/    # React Context providers for state
+│   │   ├── App.tsx      # Root component
+│   │   └── routes.tsx   # Route definitions
+│   ├── styles/          # Styling files (Tailwind, fonts, themes)
+│   └── main.tsx         # Application entry point
+├── index.html           # HTML template
+├── package.json         # Project dependencies and scripts
+├── postcss.config.mjs   # PostCSS configuration
+├── tsconfig.json        # TypeScript configuration
+└── vite.config.ts       # Vite build configuration
 ```
 
 ## Directory Purposes
 
-**src/app/components/:**
-- Purpose: Contains the main feature components of the application.
-- Contains: React components for core functional blocks.
-- Key files: `ChatBot.tsx`, `DeadlineCalendar.tsx`, `DiagramCanvas.tsx`, `SpecViewer.tsx`.
+**src/app/components:**
+- Purpose: Houses the functional building blocks of the UI.
+- Contains: Feature-specific components like `ChatBot.tsx`, `DiagramCanvas.tsx`, and `ProjectWorkspace.tsx`.
+- Key files: `ProjectWorkspace.tsx` which orchestrates the main application view.
 
-**src/app/components/ui/:**
-- Purpose: Contains atomic/reusable UI components.
-- Contains: Individual UI elements based on Radix UI or similar (Shadcn/UI style).
-- Key files: `button.tsx`, `card.tsx`, `resizable.tsx`.
+**src/app/components/ui:**
+- Purpose: Provides a set of foundational UI components following a design system.
+- Contains: Individual components like `button.tsx`, `card.tsx`, `resizable.tsx` (Shadcn components).
+- Key files: `utils.ts` for styling helper functions.
 
-**src/styles/:**
-- Purpose: Global styles and theme settings.
-- Contains: CSS files and theme-specific Tailwind configurations.
-- Key files: `index.css`, `tailwind.css`, `theme.css`.
+**src/app/contexts:**
+- Purpose: Manages global state that needs to be accessed by multiple components.
+- Contains: Context providers.
+- Key files: `ProjectContext.tsx` for managing project data and persistence.
 
-**src/app/components/figma/:**
-- Purpose: Specialized components for Figma integration/fallbacks.
-- Contains: React components.
-- Key files: `ImageWithFallback.tsx`.
+**src/styles:**
+- Purpose: Centralized location for application-wide styling.
+- Contains: CSS files and theme definitions.
+- Key files: `tailwind.css` for utility-first styles, `theme.css` for project-specific variables.
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/main.tsx`: Renders the React root into the HTML.
-- `index.html`: The base HTML file for the SPA.
+- `src/main.tsx`: Standard React/Vite entry point.
+- `src/app/App.tsx`: The root of the React component tree.
 
 **Configuration:**
-- `package.json`: Project metadata and dependencies.
-- `vite.config.ts`: Configuration for the Vite build system.
-- `postcss.config.mjs`: PostCSS configuration for Tailwind.
+- `vite.config.ts`: Configuration for the Vite build tool and development server.
+- `package.json`: Manages project dependencies and execution scripts.
+- `src/app/routes.tsx`: Centralized definition of application routes.
 
 **Core Logic:**
-- `src/app/App.tsx`: Manages the overall layout using resizable panels.
-- `src/app/components/SpecViewer.tsx`: Core logic for specification viewing and annotation.
-- `src/app/components/DiagramCanvas.tsx`: Core logic for drawing and AI feedback.
+- `src/app/contexts/ProjectContext.tsx`: Core business logic for project management and persistence.
 
 **Testing:**
-- Not detected (No `test/` folder or `*.test.ts` files found in the current explorer view).
+- Not detected (no dedicated testing directory or patterns found in root or `src/`).
 
 ## Naming Conventions
 
 **Files:**
-- Components: PascalCase (e.g., `ChatBot.tsx`).
-- Utilities: camelCase (e.g., `utils.ts`).
-- Styles: kebab-case or simple lowercase (e.g., `tailwind.css`).
+- React Components: PascalCase (e.g., `ProjectList.tsx`).
+- Context Providers: PascalCase (e.g., `ProjectContext.tsx`).
+- Styles/Config: kebab-case (e.g., `tailwind.css`, `vite.config.ts`).
 
 **Directories:**
-- Structure: lowercase (e.g., `ui`, `components`, `figma`, `styles`).
+- Feature directories: kebab-case (e.g., `components/ui`).
 
 ## Where to Add New Code
 
 **New Feature:**
-- Primary code: `src/app/components/`
-- Add a new `.tsx` file for the feature and export it.
-- Mount the new component in `src/app/App.tsx` (optionally within a resizable panel).
+- Primary code: Create a new component in `src/app/components/` and if it needs global state, update `src/app/contexts/ProjectContext.tsx`.
+- Tests: No current testing pattern established.
 
-**New UI Primitive:**
-- Implementation: `src/app/components/ui/`
-- Register it in the UI layer for reuse.
+**New Component/Module:**
+- Implementation: Add to `src/app/components/` if it's a high-level component, or `src/app/components/ui/` if it's a reusable primitive.
 
 **Utilities:**
-- Shared helpers: `src/app/components/ui/utils.ts` (currently where `cn` utility lives).
+- Shared helpers: Create a new utility file in `src/app/lib/` or similar (directory does not currently exist).
 
 ## Special Directories
 
-**node_modules/:**
-- Purpose: Project dependencies.
-- Generated: Yes.
-- Committed: No.
+**.planning:**
+- Purpose: Contains markdown files detailing the codebase analysis and implementation plans.
+- Generated: No (manually maintained by AI tools).
+- Committed: Yes.
 
-**.planning/codebase/:**
-- Purpose: Architecture and structure documentation generated by GSD tools.
-- Generated: Yes.
+**guidelines:**
+- Purpose: Holds project-specific guidelines and rules.
 - Committed: Yes.
 
 ---
 
-*Structure analysis: 2025-02-14*
+*Structure analysis: 2025-03-05*
