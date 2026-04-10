@@ -181,8 +181,8 @@ export function DiagramCanvas() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-zinc-900">
-      <div className="p-4 border-b border-zinc-800 shrink-0">
+    <div className="flex flex-col h-full bg-zinc-900">
+      <div className="p-4 border-b border-zinc-800">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-zinc-100">Flow Diagram Canvas</h2>
           <Button 
@@ -249,7 +249,7 @@ export function DiagramCanvas() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden p-4 bg-zinc-950 relative">
+      <div className="flex-1 p-4 bg-zinc-950 relative">
         <canvas
           ref={canvasRef}
           className="w-full h-full bg-zinc-900 rounded border-2 border-zinc-800 cursor-crosshair"
