@@ -1,10 +1,26 @@
 import { useNavigate } from 'react-router';
 import { useProjects } from '../contexts/ProjectContext';
-import { GraduationCap, Upload, Calendar, Trash2, FileText, X } from 'lucide-react';
+import { GraduationCap, Upload, Calendar, Trash2, FileText, X, AlertTriangle } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from './ui/alert-dialog';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
+
+// Set worker source for pdfjs using Vite's URL import
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 export function ProjectList() {
   const { projects, addProject, deleteProject } = useProjects();
@@ -15,29 +31,99 @@ export function ProjectList() {
   const [pendingFile, setPendingFile] = useState<{ name: string; content: string } | null>(null);
   const [projectName, setProjectName] = useState('');
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
-    const reader = new FileReader();
+    const defaultName = file.name.replace(/\.(txt|md|pdf)$/i, '');
 
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      const defaultName = file.name.replace(/\.(txt|md|pdf)$/i, '');
-
-      setPendingFile({ name: defaultName, content });
-      setProjectName(defaultName);
-      setShowNameDialog(true);
+    try {
+      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const typedArray = new Uint8Array(event.target?.result as ArrayBuffer);
+            const pdf = await pdfjs.getDocument(typedArray).promise;
+            let fullText = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              let lastY = -1;
+              let pageText = '';
+              
+              for (const item of textContent.items as any[]) {
+                if (lastY !== -1 && Math.abs(item.transform[5] - lastY) > 5) {
+                  pageText += '\n';
+                }
+                
+                // Heuristic for headers: if it's much taller than average text
+                // or if it stands alone on a line and is short
+                const isHeader = item.height > 12;
+                if (isHeader && (pageText.endsWith('\n') || pageText === '')) {
+                  pageText += '### ' + item.str;
+                } else {
+                  pageText += item.str;
+                }
+                
+                lastY = item.transform[5];
+              }
+              fullText += pageText + '\n\n';
+            }
+            
+            // Post-process to detect lists and common patterns
+            const processedText = fullText
+              .split('\n')
+              .map(line => {
+                const trimmed = line.trim();
+                // Detect bullet points
+                if (/^[\u2022\u00b7\u25cf\u25cb]/.test(trimmed)) {
+                  return '- ' + trimmed.substring(1).trim();
+                }
+                // Detect numbered lists
+                if (/^\d+\s+/.test(trimmed)) {
+                  return trimmed.replace(/^(\d+)\s+/, '$1. ');
+                }
+                return line;
+              })
+              .join('\n');
+            
+            setPendingFile({ name: defaultName, content: processedText.trim() });
+            setProjectName(defaultName);
+            setShowNameDialog(true);
+            setUploading(false);
+          } catch (err) {
+            console.error('Error parsing PDF:', err);
+            alert('Failed to parse PDF file');
+            setUploading(false);
+          }
+        };
+        reader.onerror = () => {
+          alert('Failed to read file');
+          setUploading(false);
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          setPendingFile({ name: defaultName, content });
+          setProjectName(defaultName);
+          setShowNameDialog(true);
+          setUploading(false);
+        };
+        reader.onerror = () => {
+          alert('Failed to read file');
+          setUploading(false);
+        };
+        reader.readAsText(file);
+      }
+    } catch (error) {
+      console.error('File selection error:', error);
+      alert('An error occurred during file selection');
       setUploading(false);
-    };
-
-    reader.onerror = () => {
-      setUploading(false);
-      alert('Failed to read file');
-    };
-
-    reader.readAsText(file);
+    }
 
     // Reset input
     if (fileInputRef.current) {
@@ -48,11 +134,19 @@ export function ProjectList() {
   const handleCreateProject = () => {
     if (!pendingFile || !projectName.trim()) return;
 
-    const newProject = addProject(projectName.trim(), pendingFile.content);
-    setShowNameDialog(false);
-    setPendingFile(null);
-    setProjectName('');
-    navigate(`/project/${newProject.id}`);
+    try {
+      const newProject = addProject(projectName.trim(), pendingFile.content);
+      setShowNameDialog(false);
+      setPendingFile(null);
+      setProjectName('');
+      navigate(`/project/${newProject.id}`);
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      alert('Failed to create project. Please try again.');
+      setShowNameDialog(false);
+      setPendingFile(null);
+      setProjectName('');
+    }
   };
 
   const handleCancelUpload = () => {
@@ -61,11 +155,11 @@ export function ProjectList() {
     setProjectName('');
   };
 
-  const handleDelete = (e: React.MouseEvent, projectId: string) => {
-    e.stopPropagation();
-    if (confirm('Are you sure you want to delete this project?')) {
-      deleteProject(projectId);
-    }
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+
+  const handleDelete = (projectId: string) => {
+    deleteProject(projectId);
+    setProjectToDelete(null);
   };
 
   return (
@@ -112,19 +206,53 @@ export function ProjectList() {
           {/* Project Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
-              <button
+              <div
                 key={project.id}
                 onClick={() => navigate(`/project/${project.id}`)}
-                className="group relative bg-zinc-900 border border-zinc-800 rounded-lg p-6 text-left hover:border-blue-500 hover:bg-zinc-800 transition-all"
+                className="group relative bg-zinc-900 border border-zinc-800 rounded-lg p-6 text-left hover:border-blue-500 hover:bg-zinc-800 transition-all cursor-pointer"
               >
                 {/* Delete Button */}
-                <button
-                  onClick={(e) => handleDelete(e, project.id)}
-                  className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label="Delete project"
+                <AlertDialog 
+                  open={projectToDelete === project.id} 
+                  onOpenChange={(open) => !open && setProjectToDelete(null)}
                 >
-                  <Trash2 className="size-4" />
-                </button>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProjectToDelete(project.id);
+                      }}
+                      className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-40 group-hover:opacity-100 transition-opacity z-10"
+                      aria-label="Delete project"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white" onClick={(e) => e.stopPropagation()}>
+                    <AlertDialogHeader>
+                      <div className="flex items-center gap-2 text-red-400 mb-2">
+                        <AlertTriangle className="size-5" />
+                        <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                      </div>
+                      <AlertDialogDescription className="text-zinc-400">
+                        Are you sure you want to delete <span className="text-white font-medium">"{project.name}"</span>? 
+                        This action cannot be undone and all associated data will be permanently removed.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-4">
+                      <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white border-0">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={() => handleDelete(project.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        Delete Project
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
 
                 {/* Project Icon */}
                 <div className="flex items-center justify-center size-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 mb-4">
@@ -153,7 +281,7 @@ export function ProjectList() {
                     </svg>
                   </div>
                 </div>
-              </button>
+              </div>
             ))}
 
             {/* Empty State */}

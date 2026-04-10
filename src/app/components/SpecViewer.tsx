@@ -1,9 +1,11 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Send, MessageCircle, X, Trash2 } from 'lucide-react';
 import { useProjects } from '../contexts/ProjectContext';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Annotation {
   id: string;
@@ -19,9 +21,7 @@ interface Annotation {
 
 interface SelectionInfo {
   text: string;
-  sectionId: string;
-  startOffset: number;
-  endOffset: number;
+  range: Range;
 }
 
 export function SpecViewer() {
@@ -58,32 +58,12 @@ export function SpecViewer() {
     const selection = window.getSelection();
     const text = selection?.toString().trim();
 
-    if (text && text.length > 0 && selection) {
+    if (text && text.length > 0 && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
       
-      // Find the section element
-      let sectionElement = range.startContainer.parentElement;
-      while (sectionElement && !sectionElement.getAttribute('data-section-id')) {
-        sectionElement = sectionElement.parentElement;
-      }
-
-      if (!sectionElement) return;
-
-      const sectionId = sectionElement.getAttribute('data-section-id') || '';
-      const sectionText = sectionElement.textContent || '';
-      
-      // Get the text before the selection to calculate offset
-      const preRange = document.createRange();
-      preRange.setStart(sectionElement, 0);
-      preRange.setEnd(range.startContainer, range.startOffset);
-      const startOffset = preRange.toString().length;
-      const endOffset = startOffset + text.length;
-
       setSelectionInfo({
         text,
-        sectionId,
-        startOffset,
-        endOffset,
+        range: range.cloneRange(),
       });
       
       const rect = range.getBoundingClientRect();
@@ -91,7 +71,7 @@ export function SpecViewer() {
       if (rect && specRef.current) {
         const specRect = specRef.current.getBoundingClientRect();
         setQuestionBoxPosition({
-          top: rect.bottom - specRect.top + 10,
+          top: rect.bottom - specRect.top + specRef.current.scrollTop + 10,
           left: rect.left - specRect.left,
         });
         setShowQuestionBox(true);
@@ -105,24 +85,46 @@ export function SpecViewer() {
     if (!question.trim() || !selectionInfo) return;
 
     const colorIndex = selectedColorIndex;
+    const annotationId = Date.now().toString();
+    
+    const span = document.createElement('mark');
+    span.className = `${highlightColors[colorIndex]} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+    span.dataset.annotationId = annotationId;
+    
     const newAnnotation: Annotation = {
-      id: Date.now().toString(),
+      id: annotationId,
       question: question,
       answer: generateMockResponse(question, selectionInfo.text),
       highlightedText: selectionInfo.text,
       color: highlightColors[colorIndex],
       borderColor: colors[colorIndex],
-      sectionId: selectionInfo.sectionId,
-      startOffset: selectionInfo.startOffset,
-      endOffset: selectionInfo.endOffset,
+      sectionId: 'dynamic',
+      startOffset: 0,
+      endOffset: 0,
     };
 
-    setAnnotations([...annotations, newAnnotation]);
+    try {
+      selectionInfo.range.surroundContents(span);
+      
+      const icon = document.createElement('span');
+      icon.innerHTML = '💬';
+      icon.className = 'inline-block ml-1 text-[10px]';
+      span.appendChild(icon);
+
+      span.onclick = (e) => {
+        e.stopPropagation();
+        handleAnnotationClick(newAnnotation, e as unknown as React.MouseEvent);
+      };
+
+      setAnnotations(prev => [...prev, newAnnotation]);
+    } catch (e) {
+      console.error('Could not highlight complex selection:', e);
+      alert('Selection spans across multiple formatting elements. Please select text within a single paragraph or heading.');
+    }
+
     setQuestion('');
     setShowQuestionBox(false);
     setSelectionInfo(null);
-    
-    // Clear selection
     window.getSelection()?.removeAllRanges();
   };
 
@@ -143,7 +145,7 @@ export function SpecViewer() {
       const targetRect = (event.target as HTMLElement).getBoundingClientRect();
       
       setAnnotationPopupPosition({
-        top: targetRect.bottom - specRect.top + 10,
+        top: targetRect.bottom - specRect.top + specRef.current.scrollTop + 10,
         left: targetRect.left - specRect.left,
       });
       setSelectedAnnotation(annotation);
@@ -151,117 +153,41 @@ export function SpecViewer() {
   };
 
   const handleDeleteAnnotation = (annotationId: string) => {
-    setAnnotations(annotations.filter(a => a.id !== annotationId));
+    const element = document.querySelector(`mark[data-annotation-id="${annotationId}"]`);
+    if (element) {
+      const parent = element.parentNode;
+      while (element.firstChild) {
+        if (element.firstChild.nodeType === Node.ELEMENT_NODE && (element.firstChild as HTMLElement).innerText === '💬') {
+          element.removeChild(element.firstChild);
+        } else {
+          parent?.insertBefore(element.firstChild, element);
+        }
+      }
+      parent?.removeChild(element);
+    }
+    setAnnotations(prev => prev.filter(a => a.id !== annotationId));
     setSelectedAnnotation(null);
   };
 
   const handleChangeAnnotationColor = (colorIndex: number) => {
     if (!selectedAnnotation) return;
     
+    const element = document.querySelector(`mark[data-annotation-id="${selectedAnnotation.id}"]`);
+    if (element) {
+      element.className = `${highlightColors[colorIndex]} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+    }
+
     const updatedAnnotation = {
       ...selectedAnnotation,
       color: highlightColors[colorIndex],
       borderColor: colors[colorIndex],
     };
 
-    setAnnotations(annotations.map(a => 
+    setAnnotations(prev => prev.map(a => 
       a.id === selectedAnnotation.id ? updatedAnnotation : a
     ));
     setSelectedAnnotation(updatedAnnotation);
   };
-  
-  const renderTextWithHighlights = (text: string, sectionId: string) => {
-    const sectionAnnotations = annotations.filter(a => a.sectionId === sectionId);
-
-    if (sectionAnnotations.length === 0) return text;
-
-    const parts: { text: string; annotation?: Annotation }[] = [];
-    let currentIndex = 0;
-
-    // Create a sorted list of annotation positions
-    const annotationMatches: { start: number; end: number; annotation: Annotation }[] =
-      sectionAnnotations.map(annotation => ({
-        start: annotation.startOffset,
-        end: annotation.endOffset,
-        annotation: annotation,
-      }));
-
-    // Sort by start position
-    annotationMatches.sort((a, b) => a.start - b.start);
-
-    // Build the text parts
-    annotationMatches.forEach(match => {
-      if (match.start > currentIndex) {
-        parts.push({ text: text.substring(currentIndex, match.start) });
-      }
-      parts.push({
-        text: text.substring(match.start, match.end),
-        annotation: match.annotation
-      });
-      currentIndex = match.end;
-    });
-
-    if (currentIndex < text.length) {
-      parts.push({ text: text.substring(currentIndex) });
-    }
-
-    if (parts.length === 0) {
-      return text;
-    }
-
-    return (
-      <>
-        {parts.map((part, index) => {
-          if (part.annotation) {
-            return (
-              <mark
-                key={index}
-                className={`${part.annotation.color} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative`}
-                onClick={(e) => handleAnnotationClick(part.annotation!, e)}
-              >
-                {part.text}
-                <MessageCircle className="inline-block size-3 ml-0.5 mb-0.5" />
-              </mark>
-            );
-          }
-          return <span key={index}>{part.text}</span>;
-        })}
-      </>
-    );
-  };
-
-  // Parse the spec content into sections
-  const parsedSections = useMemo(() => {
-    if (!currentProject) return [];
-
-    const lines = currentProject.spec.split('\n');
-    const sections: { id: string; type: 'heading' | 'paragraph' | 'list-item'; content: string; level?: number }[] = [];
-    let currentId = 0;
-
-    lines.forEach((line, index) => {
-      if (line.trim() === '') return;
-
-      // Check for markdown headers
-      const h1Match = line.match(/^# (.+)$/);
-      const h2Match = line.match(/^## (.+)$/);
-      const h3Match = line.match(/^### (.+)$/);
-      const listMatch = line.match(/^(\d+\.|[-*]) (.+)$/);
-
-      if (h1Match) {
-        sections.push({ id: `section-${currentId++}`, type: 'heading', content: h1Match[1], level: 1 });
-      } else if (h2Match) {
-        sections.push({ id: `section-${currentId++}`, type: 'heading', content: h2Match[1], level: 2 });
-      } else if (h3Match) {
-        sections.push({ id: `section-${currentId++}`, type: 'heading', content: h3Match[1], level: 3 });
-      } else if (listMatch) {
-        sections.push({ id: `section-${currentId++}`, type: 'list-item', content: listMatch[2] });
-      } else {
-        sections.push({ id: `section-${currentId++}`, type: 'paragraph', content: line.trim() });
-      }
-    });
-
-    return sections;
-  }, [currentProject]);
 
   if (!currentProject) {
     return (
@@ -291,37 +217,22 @@ export function SpecViewer() {
       </div>
       
       <div ref={specRef} className="flex-1 overflow-auto p-6 relative bg-zinc-900 text-zinc-100" onMouseUp={handleTextSelect}>
-        <div className="max-w-3xl space-y-4">
-          {parsedSections.map((section) => {
-            if (section.type === 'heading') {
-              const HeadingTag = section.level === 1 ? 'h1' : section.level === 2 ? 'h2' : 'h3';
-              const className = section.level === 1
-                ? 'font-bold text-xl text-zinc-50'
-                : section.level === 2
-                ? 'font-semibold text-lg text-zinc-100 mt-6'
-                : 'font-semibold text-zinc-100 mt-4';
-              return (
-                <HeadingTag key={section.id} className={className} data-section-id={section.id}>
-                  {renderTextWithHighlights(section.content, section.id)}
-                </HeadingTag>
-              );
-            }
-            if (section.type === 'list-item') {
-              return (
-                <div key={section.id} className="flex gap-2 text-sm ml-4">
-                  <span className="text-zinc-400">•</span>
-                  <p className="leading-relaxed text-zinc-300 flex-1" data-section-id={section.id}>
-                    {renderTextWithHighlights(section.content, section.id)}
-                  </p>
-                </div>
-              );
-            }
-            return (
-              <p key={section.id} className="text-sm leading-relaxed text-zinc-300" data-section-id={section.id}>
-                {renderTextWithHighlights(section.content, section.id)}
-              </p>
-            );
-          })}
+        <div className="max-w-3xl prose prose-invert prose-zinc prose-sm sm:prose-base prose-headings:text-zinc-50 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-ul:text-zinc-300 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline">
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ node, ...props }) => (
+                <a 
+                  {...props} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  onClick={(e) => e.stopPropagation()} 
+                />
+              )
+            }}
+          >
+            {currentProject.spec}
+          </ReactMarkdown>
         </div>
 
         {showQuestionBox && (

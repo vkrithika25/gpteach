@@ -83,7 +83,9 @@ Provide load testing results using Apache Bench or similar tools.`,
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Load projects from localStorage on mount
   useEffect(() => {
@@ -94,20 +96,46 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error('Failed to load projects:', e);
         setProjects(defaultProjects);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultProjects));
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultProjects));
+        } catch (storageErr) {
+          console.error('Failed to save default projects to localStorage:', storageErr);
+        }
       }
     } else {
       setProjects(defaultProjects);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultProjects));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultProjects));
+      } catch (storageErr) {
+        console.error('Failed to save default projects to localStorage:', storageErr);
+      }
     }
+    setIsLoaded(true);
   }, []);
 
   // Save projects to localStorage whenever they change
   useEffect(() => {
-    if (projects.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+    if (isLoaded) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+      } catch (e) {
+        console.error('Failed to save projects to localStorage:', e);
+        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+          alert('Storage quota exceeded! Could not save project. Try removing some projects.');
+        }
+      }
     }
-  }, [projects]);
+  }, [projects, isLoaded]);
+
+  // Sync currentProject whenever projects or currentProjectId changes
+  useEffect(() => {
+    if (currentProjectId) {
+      const project = projects.find((p) => p.id === currentProjectId);
+      setCurrentProjectState(project || null);
+    } else {
+      setCurrentProjectState(null);
+    }
+  }, [projects, currentProjectId]);
 
   const addProject = useCallback((name: string, spec: string): Project => {
     const newProject: Project = {
@@ -123,19 +151,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const deleteProject = useCallback((id: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== id));
-    setCurrentProjectState((prev) => (prev?.id === id ? null : prev));
-  }, []);
+    if (currentProjectId === id) {
+      setCurrentProjectId(null);
+    }
+  }, [currentProjectId]);
 
   const setCurrentProject = useCallback((id: string | null) => {
-    if (id === null) {
-      setCurrentProjectState(null);
-    } else {
-      setProjects((currentProjects) => {
-        const project = currentProjects.find((p) => p.id === id);
-        setCurrentProjectState(project || null);
-        return currentProjects;
-      });
-    }
+    setCurrentProjectId(id);
   }, []);
 
   const updateProjectSpec = useCallback((id: string, spec: string) => {
@@ -143,9 +165,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       prev.map((p) =>
         p.id === id ? { ...p, spec, lastModified: new Date().toISOString() } : p
       )
-    );
-    setCurrentProjectState((prev) =>
-      prev?.id === id ? { ...prev, spec, lastModified: new Date().toISOString() } : prev
     );
   }, []);
 
@@ -158,6 +177,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         deleteProject,
         setCurrentProject,
         updateProjectSpec,
+        isLoaded,
       }}
     >
       {children}

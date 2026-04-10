@@ -11,7 +11,7 @@ import { GraduationCap, ArrowLeft } from 'lucide-react';
 export function ProjectWorkspace() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { projects, setCurrentProject, currentProject } = useProjects();
+  const { projects, setCurrentProject, currentProject, isLoaded } = useProjects();
 
   useEffect(() => {
     if (projectId) {
@@ -19,12 +19,12 @@ export function ProjectWorkspace() {
     }
   }, [projectId, setCurrentProject]);
 
-  // Redirect if project not found
+  // Redirect if project not found after loading
   useEffect(() => {
-    if (projectId && !projects.find((p) => p.id === projectId)) {
+    if (isLoaded && projectId && !projects.find((p) => p.id === projectId)) {
       navigate('/');
     }
-  }, [projectId, projects, navigate]);
+  }, [isLoaded, projectId, projects, navigate]);
 
   if (!currentProject) {
     return (
