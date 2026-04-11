@@ -1,11 +1,8 @@
+# GPTeach
 
-  # CSE 594 Demo
+A teaching assistant application built for CSE 594.
 
-  This is a code bundle for CSE 594 Demo. The original project is available at https://www.figma.com/design/KUOHHV2llHjfzT3WYUDToj/CSE-594-Demo.
+## Project Structure
 
-  ## Running the code
-
-  Run `npm i` to install the dependencies.
-
-  Run `npm run dev` to start the development server.
-  
+- **frontend/** — React frontend (Vite + shadcn). See [frontend/README.md](frontend/README.md) for setup instructions.
+- **backend/** — Backend server (coming soon).
