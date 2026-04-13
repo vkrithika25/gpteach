@@ -15,6 +15,8 @@ interface ProjectContextType {
   deleteProject: (id: string) => void;
   setCurrentProject: (id: string | null) => void;
   updateProjectSpec: (id: string, spec: string) => void;
+  backendSessionId: string | null;
+  setBackendSessionId: (id: string | null) => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -86,6 +88,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [backendSessionId, setBackendSessionId] = useState<string | null>(null);
 
   // Load projects from localStorage on mount
   useEffect(() => {
@@ -178,6 +181,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setCurrentProject,
         updateProjectSpec,
         isLoaded,
+        backendSessionId,
+        setBackendSessionId,
       }}
     >
       {children}

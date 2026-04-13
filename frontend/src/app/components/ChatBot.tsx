@@ -3,6 +3,8 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Send, Bot, User } from "lucide-react";
 import { Card } from "./ui/card";
+import { useProjects } from "../contexts/ProjectContext";
+import { teachRespond, ContextMessage } from "../lib/api";
 
 interface ChatMessage {
   id: string;
@@ -12,11 +14,12 @@ interface ChatMessage {
 }
 
 export function ChatBot() {
+  const { backendSessionId } = useProjects();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "1",
       sender: "bot",
-      text: "Hi! I'm here to help with your project. I can help you understand your requirements, suggest implementation strategies, debug issues, and answer questions about distributed systems. How can I help you today?",
+      text: "Hi! I'm GpTeach — I'm here to help you understand your project specification. I won't give you the answers, but I'll help you think through the problem. What would you like to explore?",
       timestamp: new Date(),
     },
   ]);
@@ -34,74 +37,16 @@ export function ChatBot() {
     scrollToBottom();
   }, [messages]);
 
-  const generateBotResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
-
-    if (
-      lowerMessage.includes("consistency") ||
-      lowerMessage.includes("vector clock")
-    ) {
-      return "Vector clocks are a great choice for tracking causality in distributed systems! Each node maintains a vector of logical clocks. When an event occurs, the node increments its own clock. When sending a message, it includes its vector clock, and the receiver merges it with its own. This helps you detect concurrent operations and resolve conflicts.";
-    }
-
-    if (
-      lowerMessage.includes("replication") ||
-      lowerMessage.includes("quorum")
-    ) {
-      return "For replication, I'd recommend implementing a quorum-based system. With N replicas, you typically need W nodes to acknowledge a write and R nodes to participate in a read, where W + R > N. This ensures consistency. For example, with N=3, you might use W=2 and R=2. This gives you fault tolerance while maintaining strong consistency.";
-    }
-
-    if (
-      lowerMessage.includes("consistent hashing") ||
-      lowerMessage.includes("dht")
-    ) {
-      return "Consistent hashing is perfect for this! Map both nodes and keys to points on a ring (0 to 2^32-1). Each key is stored on the first node you encounter when moving clockwise on the ring. When nodes join or leave, only a small portion of keys need to be redistributed. Don't forget to implement virtual nodes to balance the load more evenly.";
-    }
-
-    if (
-      lowerMessage.includes("gossip") ||
-      lowerMessage.includes("failure detection")
-    ) {
-      return "Gossip protocols are excellent for failure detection in distributed systems. Each node periodically picks random peers and exchanges heartbeat information. If a node hasn't been heard from in T time periods, mark it as suspected. After another timeout, mark it as failed. The probabilistic nature ensures the information spreads quickly even with node failures.";
-    }
-
-    if (
-      lowerMessage.includes("test") ||
-      lowerMessage.includes("testing")
-    ) {
-      return "Testing distributed systems requires multiple strategies: 1) Unit tests for individual components, 2) Integration tests that simulate network partitions and failures, 3) Chaos testing where you randomly kill nodes or introduce delays, and 4) Performance tests to measure throughput and latency under load. Consider using tools like Docker to simulate multiple nodes locally.";
-    }
-
-    if (
-      lowerMessage.includes("start") ||
-      lowerMessage.includes("begin") ||
-      lowerMessage.includes("first")
-    ) {
-      return "Great question! I'd suggest starting with: 1) Design your data structures (keys, values, node metadata), 2) Implement a single-node version with basic PUT/GET/DELETE, 3) Add consistent hashing for key distribution, 4) Implement node-to-node communication, 5) Add replication, and finally 6) Implement failure detection and recovery. Build incrementally and test each piece!";
-    }
-
-    if (
-      lowerMessage.includes("partition") ||
-      lowerMessage.includes("network partition")
-    ) {
-      return "Network partitions are challenging! Your system needs to decide between availability and consistency (CAP theorem). With eventual consistency, both partitions can accept writes, then reconcile later using vector clocks. Alternatively, you can use a coordinator that rejects writes when it can't reach a quorum. Think about which approach makes more sense for your use case.";
-    }
-
-    // Default responses
-    const defaultResponses = [
-      "That's a great question! For distributed systems, it's important to consider the trade-offs between consistency, availability, and partition tolerance. What specific aspect would you like to explore?",
-      "I can help you break that down. Have you thought about how this component will interact with the rest of your system?",
-      "Interesting! One approach would be to start by modeling the data flow. What information needs to be shared between nodes?",
-      "Good thinking! Remember that in distributed systems, you need to handle cases where nodes fail or network delays occur. How might that affect your design?",
-    ];
-
-    return defaultResponses[
-      Math.floor(Math.random() * defaultResponses.length)
-    ];
+  const buildRecentContext = (): ContextMessage[] => {
+    // Send the last 10 messages as context (skip the initial greeting)
+    return messages.slice(-10).map((m) => ({
+      role: m.sender === "user" ? ("student" as const) : ("assistant" as const),
+      content: m.text,
+    }));
   };
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || !backendSessionId) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -110,24 +55,37 @@ export function ChatBot() {
       timestamp: new Date(),
     };
 
-    setMessages([...messages, userMessage]);
+    const currentInput = input;
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsTyping(true);
 
-    // Simulate bot typing delay
-    setTimeout(
-      () => {
-        const botResponse: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          sender: "bot",
-          text: generateBotResponse(input),
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, botResponse]);
-        setIsTyping(false);
-      },
-      1000 + Math.random() * 1000,
-    );
+    try {
+      const response = await teachRespond({
+        session_id: backendSessionId,
+        student_message: currentInput,
+        recent_context: buildRecentContext(),
+      });
+
+      const botResponse: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: "bot",
+        text: response.assistant_message,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, botResponse]);
+    } catch (err) {
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: "bot",
+        text: "Sorry, I couldn't reach the server. Please make sure the backend is running and try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      console.error("Teach request failed:", err);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (

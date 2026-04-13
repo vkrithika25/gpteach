@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router';
 import { useEffect } from 'react';
 import { useProjects } from '../contexts/ProjectContext';
+import { createSession } from '../lib/api';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable';
 import { SpecViewer } from './SpecViewer';
 import { DiagramCanvas } from './DiagramCanvas';
@@ -11,13 +12,31 @@ import { GraduationCap, ArrowLeft } from 'lucide-react';
 export function ProjectWorkspace() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { projects, setCurrentProject, currentProject, isLoaded } = useProjects();
+  const { projects, setCurrentProject, currentProject, isLoaded, backendSessionId, setBackendSessionId } = useProjects();
 
   useEffect(() => {
     if (projectId) {
       setCurrentProject(projectId);
     }
   }, [projectId, setCurrentProject]);
+
+  // Create a backend session when the project loads
+  useEffect(() => {
+    if (!currentProject || backendSessionId) return;
+
+    createSession({
+      project_spec_text: currentProject.spec,
+      title: currentProject.name,
+      assignment_name: currentProject.name,
+    })
+      .then((session) => setBackendSessionId(session.id))
+      .catch((err) => console.error('Failed to create backend session:', err));
+  }, [currentProject, backendSessionId, setBackendSessionId]);
+
+  // Clear backend session when leaving the workspace
+  useEffect(() => {
+    return () => setBackendSessionId(null);
+  }, [setBackendSessionId]);
 
   // Redirect if project not found after loading
   useEffect(() => {

@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Send, MessageCircle, X, Trash2 } from 'lucide-react';
+import { Send, MessageCircle, X, Trash2, Loader2 } from 'lucide-react';
 import { useProjects } from '../contexts/ProjectContext';
+import { teachRespond } from '../lib/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -25,7 +26,8 @@ interface SelectionInfo {
 }
 
 export function SpecViewer() {
-  const { currentProject } = useProjects();
+  const { currentProject, backendSessionId } = useProjects();
+  const [isAsking, setIsAsking] = useState(false);
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
   const [showQuestionBox, setShowQuestionBox] = useState(false);
   const [questionBoxPosition, setQuestionBoxPosition] = useState({ top: 0, left: 0 });
@@ -81,33 +83,43 @@ export function SpecViewer() {
     }
   };
 
-  const handleAskQuestion = () => {
-    if (!question.trim() || !selectionInfo) return;
+  const handleAskQuestion = async () => {
+    if (!question.trim() || !selectionInfo || !backendSessionId) return;
 
     const colorIndex = selectedColorIndex;
     const annotationId = Date.now().toString();
-    
-    const span = document.createElement('mark');
-    span.className = `${highlightColors[colorIndex]} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
-    span.dataset.annotationId = annotationId;
-    
-    const newAnnotation: Annotation = {
-      id: annotationId,
-      question: question,
-      answer: generateMockResponse(question, selectionInfo.text),
-      highlightedText: selectionInfo.text,
-      color: highlightColors[colorIndex],
-      borderColor: colors[colorIndex],
-      sectionId: 'dynamic',
-      startOffset: 0,
-      endOffset: 0,
-    };
+    const currentQuestion = question;
+    const currentSelection = selectionInfo;
+
+    setIsAsking(true);
 
     try {
-      selectionInfo.range.surroundContents(span);
-      
+      const response = await teachRespond({
+        session_id: backendSessionId,
+        student_message: `Regarding this part of the spec: "${currentSelection.text}"\n\nMy question: ${currentQuestion}`,
+        want_hint_only: true,
+      });
+
+      const span = document.createElement('mark');
+      span.className = `${highlightColors[colorIndex]} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+      span.dataset.annotationId = annotationId;
+
+      const newAnnotation: Annotation = {
+        id: annotationId,
+        question: currentQuestion,
+        answer: response.assistant_message,
+        highlightedText: currentSelection.text,
+        color: highlightColors[colorIndex],
+        borderColor: colors[colorIndex],
+        sectionId: 'dynamic',
+        startOffset: 0,
+        endOffset: 0,
+      };
+
+      currentSelection.range.surroundContents(span);
+
       const icon = document.createElement('span');
-      icon.innerHTML = '💬';
+      icon.innerHTML = '\uD83D\uDCAC';
       icon.className = 'inline-block ml-1 text-[10px]';
       span.appendChild(icon);
 
@@ -118,24 +130,15 @@ export function SpecViewer() {
 
       setAnnotations(prev => [...prev, newAnnotation]);
     } catch (e) {
-      console.error('Could not highlight complex selection:', e);
-      alert('Selection spans across multiple formatting elements. Please select text within a single paragraph or heading.');
+      console.error('Failed to get answer:', e);
+      alert('Could not get an answer. Make sure the backend is running.');
+    } finally {
+      setIsAsking(false);
+      setQuestion('');
+      setShowQuestionBox(false);
+      setSelectionInfo(null);
+      window.getSelection()?.removeAllRanges();
     }
-
-    setQuestion('');
-    setShowQuestionBox(false);
-    setSelectionInfo(null);
-    window.getSelection()?.removeAllRanges();
-  };
-
-  const generateMockResponse = (q: string, context: string): string => {
-    const responses = [
-      `Based on "${context}", this requirement focuses on implementing a key feature. I'd suggest breaking this down into smaller tasks: 1) Set up the data structure, 2) Implement the core logic, 3) Add error handling.`,
-      `This part of the spec deals with "${context}". You should start by creating a class diagram to model the relationships between components before coding.`,
-      `The highlighted section "${context}" indicates a functional requirement. Make sure to write unit tests for this before moving to the next feature.`,
-      `This requirement about "${context}" seems to depend on other parts of the system. I recommend tackling the dependencies first.`,
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
   };
 
   const handleAnnotationClick = (annotation: Annotation, event: React.MouseEvent) => {
@@ -279,9 +282,9 @@ export function SpecViewer() {
                     })}
                   </div>
                   <div className="flex gap-2 ml-auto">
-                    <Button onClick={handleAskQuestion} size="sm">
-                      <Send className="size-4 mr-1" />
-                      Ask
+                    <Button onClick={handleAskQuestion} size="sm" disabled={isAsking}>
+                      {isAsking ? <Loader2 className="size-4 mr-1 animate-spin" /> : <Send className="size-4 mr-1" />}
+                      {isAsking ? 'Asking...' : 'Ask'}
                     </Button>
                     <Button 
                       onClick={() => {
