@@ -25,6 +25,9 @@ interface Annotation {
 interface SelectionInfo {
   text: string;
   range: Range;
+  startOffset: number;
+  endOffset: number;
+  pendingMarkId: string;
 }
 
 export function SpecViewer() {
@@ -156,6 +159,72 @@ export function SpecViewer() {
     };
   };
 
+  const unwrapMarkElement = (element: Element) => {
+    const parent = element.parentNode;
+    if (!parent) return;
+    while (element.firstChild) {
+      if (
+        element.firstChild.nodeType === Node.ELEMENT_NODE &&
+        ['💬', '📝'].includes((element.firstChild as HTMLElement).innerText)
+      ) {
+        element.removeChild(element.firstChild);
+      } else {
+        parent.insertBefore(element.firstChild, element);
+      }
+    }
+    parent.removeChild(element);
+  };
+
+  const clearPendingHighlight = React.useCallback(() => {
+    if (!specRef.current || !selectionInfo?.pendingMarkId) return;
+    const el = specRef.current.querySelector(`mark[data-pending-id="${selectionInfo.pendingMarkId}"]`);
+    if (el) unwrapMarkElement(el);
+  }, [selectionInfo?.pendingMarkId]);
+
+  const applyPendingHighlight = (pendingId: string, range: Range, colorIndex: number) => {
+    const root = specRef.current;
+    if (!root) return;
+
+    // Don't create duplicates if selection triggers multiple times.
+    const existing = root.querySelector(`mark[data-pending-id="${pendingId}"]`);
+    if (existing) return;
+
+    const mark = document.createElement('mark');
+    mark.className = `${highlightColors[colorIndex]} text-zinc-100 cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+    mark.dataset.pendingId = pendingId;
+
+    wrapRangeWithMark(range, mark);
+
+    const icon = document.createElement('span');
+    icon.innerHTML = composeMode === 'ask' ? '💬' : '📝';
+    icon.className = 'inline-block ml-1 text-[10px] opacity-80';
+    mark.appendChild(icon);
+  };
+
+  const finalizePendingHighlight = (annotation: Annotation) => {
+    const root = specRef.current;
+    if (!root) return;
+    const el = root.querySelector(`mark[data-pending-id="${selectionInfo?.pendingMarkId ?? ''}"]`) as HTMLElement | null;
+    if (!el) {
+      // Fallback: re-apply from offsets.
+      applyAnnotationHighlight(annotation);
+      return;
+    }
+
+    delete el.dataset.pendingId;
+    el.dataset.annotationId = annotation.id;
+    el.className = `${annotation.color} text-zinc-100 cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+
+    // Ensure correct icon.
+    const last = el.lastElementChild as HTMLElement | null;
+    if (last && ['💬', '📝'].includes(last.innerText)) last.innerHTML = annotation.type === 'ai' ? '💬' : '📝';
+
+    el.onclick = (e) => {
+      e.stopPropagation();
+      handleAnnotationClick(annotation, e as unknown as ReactMouseEvent);
+    };
+  };
+
   // Load persisted annotations when project changes.
   useEffect(() => {
     if (!currentProject) return;
@@ -217,13 +286,31 @@ export function SpecViewer() {
 
     if (text && text.length > 0 && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
+
+      // Compute popup position BEFORE mutating DOM (wrapping selection in a mark can
+      // invalidate the range's client rect and cause the popup to jump to (0,0)).
+      const rect = range.getBoundingClientRect();
+
+      const root = specRef.current;
+      const offsets = root ? getGlobalOffsetsForRange(root, range) : null;
+      if (!offsets) return;
+
+      // Remove any previous pending highlight before creating a new one.
+      if (selectionInfo?.pendingMarkId) {
+        const prev = root?.querySelector(`mark[data-pending-id="${selectionInfo.pendingMarkId}"]`);
+        if (prev) unwrapMarkElement(prev);
+      }
+
+      const pendingMarkId = `pending-${Date.now()}`;
+      applyPendingHighlight(pendingMarkId, range.cloneRange(), selectedColorIndex);
       
       setSelectionInfo({
         text,
         range: range.cloneRange(),
+        startOffset: offsets.start,
+        endOffset: offsets.end,
+        pendingMarkId,
       });
-      
-      const rect = range.getBoundingClientRect();
       
       if (rect && specRef.current) {
         const specRect = specRef.current.getBoundingClientRect();
@@ -235,8 +322,7 @@ export function SpecViewer() {
         setComposeMode('ask');
       }
 
-      // Clear the native browser selection highlight (which can render unreadable
-      // colors on dark backgrounds). We keep a cloned Range in state for later.
+      // Clear the native browser selection highlight; the pending mark remains visible.
       selection.removeAllRanges();
     } else {
       setShowQuestionBox(false);
@@ -271,8 +357,6 @@ export function SpecViewer() {
     const annotationId = Date.now().toString();
     const currentQuestion = question;
     const currentSelection = selectionInfo;
-    const root = specRef.current;
-    const offsets = root ? getGlobalOffsetsForRange(root, currentSelection.range) : null;
 
     setIsAsking(true);
 
@@ -292,11 +376,11 @@ export function SpecViewer() {
         color: highlightColors[colorIndex],
         borderColor: colors[colorIndex],
         sectionId: 'dynamic',
-        startOffset: offsets?.start ?? 0,
-        endOffset: offsets?.end ?? 0,
+        startOffset: currentSelection.startOffset,
+        endOffset: currentSelection.endOffset,
       };
 
-      createHighlight(newAnnotation, colorIndex, '💬');
+      finalizePendingHighlight(newAnnotation);
 
       setAnnotations((prev) => {
         const next = [...prev, newAnnotation];
@@ -312,7 +396,6 @@ export function SpecViewer() {
       setNote('');
       setShowQuestionBox(false);
       setSelectionInfo(null);
-      window.getSelection()?.removeAllRanges();
     }
   };
 
@@ -323,8 +406,6 @@ export function SpecViewer() {
     const annotationId = Date.now().toString();
     const currentNote = note;
     const currentSelection = selectionInfo;
-    const root = specRef.current;
-    const offsets = root ? getGlobalOffsetsForRange(root, currentSelection.range) : null;
 
     const newAnnotation: Annotation = {
       id: annotationId,
@@ -335,11 +416,11 @@ export function SpecViewer() {
       color: highlightColors[colorIndex],
       borderColor: colors[colorIndex],
       sectionId: 'dynamic',
-      startOffset: offsets?.start ?? 0,
-      endOffset: offsets?.end ?? 0,
+      startOffset: currentSelection.startOffset,
+      endOffset: currentSelection.endOffset,
     };
 
-    createHighlight(newAnnotation, colorIndex, '📝');
+    finalizePendingHighlight(newAnnotation);
     setAnnotations((prev) => {
       const next = [...prev, newAnnotation];
       saveAnnotations(next);
@@ -350,7 +431,6 @@ export function SpecViewer() {
     setQuestion('');
     setShowQuestionBox(false);
     setSelectionInfo(null);
-    window.getSelection()?.removeAllRanges();
   };
 
   const handleAnnotationClick = (annotation: Annotation, event: ReactMouseEvent) => {
@@ -412,6 +492,14 @@ export function SpecViewer() {
     });
     setSelectedAnnotation(updatedAnnotation);
   };
+
+  // If user changes color while the "compose" popup is open, update the pending highlight too.
+  useEffect(() => {
+    if (!showQuestionBox || !selectionInfo?.pendingMarkId || !specRef.current) return;
+    const el = specRef.current.querySelector(`mark[data-pending-id="${selectionInfo.pendingMarkId}"]`) as HTMLElement | null;
+    if (!el) return;
+    el.className = `${highlightColors[selectedColorIndex]} text-zinc-100 cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+  }, [showQuestionBox, selectionInfo?.pendingMarkId, selectedColorIndex]);
 
   if (!currentProject) {
     return (
@@ -567,11 +655,11 @@ export function SpecViewer() {
                     )}
                     <Button 
                       onClick={() => {
+                        clearPendingHighlight();
                         setShowQuestionBox(false);
                         setSelectionInfo(null);
                         setQuestion('');
                         setNote('');
-                        window.getSelection()?.removeAllRanges();
                       }} 
                       size="sm" 
                       variant="outline"
