@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProjects } from '../contexts/ProjectContext';
 import { createSession } from '../lib/api';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './ui/resizable';
@@ -7,12 +7,47 @@ import { SpecViewer } from './SpecViewer';
 import { DiagramCanvas } from './DiagramCanvas';
 import { DeadlineCalendar } from './DeadlineCalendar';
 import { ChatBot } from './ChatBot';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, MessageSquareText, Presentation } from 'lucide-react';
 
 export function ProjectWorkspace() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { projects, setCurrentProject, currentProject, isLoaded, backendSessionId, setBackendSessionId } = useProjects();
+  const [showSpec, setShowSpec] = useState(true);
+  const [showCanvas, setShowCanvas] = useState(true);
+  const [showCalendar, setShowCalendar] = useState(true);
+  const [showChat, setShowChat] = useState(true);
+
+  const showRight = showCalendar || showChat;
+  const showAnyMain = showSpec || showCanvas || showRight;
+
+  // Never allow hiding everything; keep canvas as the "anchor" pane.
+  useEffect(() => {
+    if (!showAnyMain) setShowCanvas(true);
+  }, [showAnyMain]);
+
+  const headerToggleButtonClass = (active: boolean) =>
+    `inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${
+      active
+        ? 'border-zinc-700 bg-zinc-800 text-zinc-100'
+        : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-100'
+    }`;
+
+  const mainLayout = useMemo(() => {
+    const left = showSpec;
+    const middle = showCanvas;
+    const right = showRight;
+
+    const count = [left, middle, right].filter(Boolean).length;
+    const sizes =
+      count === 1
+        ? { left: 100, middle: 100, right: 100 }
+        : count === 2
+          ? { left: 45, middle: 55, right: 45 }
+          : { left: 25, middle: 40, right: 35 };
+
+    return { left, middle, right, sizes };
+  }, [showSpec, showCanvas, showRight]);
 
   useEffect(() => {
     if (projectId) {
@@ -70,6 +105,49 @@ export function ProjectWorkspace() {
           <header className="inline-flex items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5">
             <h1 className="text-sm font-semibold text-zinc-100">{currentProject.name}</h1>
           </header>
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              className={headerToggleButtonClass(showSpec)}
+              onClick={() => setShowSpec((v) => !v)}
+              aria-pressed={showSpec}
+              title="Toggle spec"
+            >
+              <FileText className="size-3.5" />
+              Spec
+            </button>
+            <button
+              type="button"
+              className={headerToggleButtonClass(showCanvas)}
+              onClick={() => setShowCanvas((v) => !v)}
+              aria-pressed={showCanvas}
+              title="Toggle canvas"
+            >
+              <Presentation className="size-3.5" />
+              Canvas
+            </button>
+            <button
+              type="button"
+              className={headerToggleButtonClass(showCalendar)}
+              onClick={() => setShowCalendar((v) => !v)}
+              aria-pressed={showCalendar}
+              title="Toggle calendar"
+            >
+              <Calendar className="size-3.5" />
+              Calendar
+            </button>
+            <button
+              type="button"
+              className={headerToggleButtonClass(showChat)}
+              onClick={() => setShowChat((v) => !v)}
+              aria-pressed={showChat}
+              title="Toggle chat"
+            >
+              <MessageSquareText className="size-3.5" />
+              Chat
+            </button>
+          </div>
         </div>
       </div>
 
@@ -77,33 +155,45 @@ export function ProjectWorkspace() {
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup direction="horizontal">
           {/* Left Panel - Spec Viewer */}
-          <ResizablePanel defaultSize={25} minSize={20}>
-            <SpecViewer />
-          </ResizablePanel>
+          {mainLayout.left && (
+            <ResizablePanel defaultSize={mainLayout.sizes.left} minSize={20}>
+              <SpecViewer />
+            </ResizablePanel>
+          )}
 
-          <ResizableHandle />
+          {mainLayout.left && mainLayout.middle && <ResizableHandle />}
 
           {/* Middle Panel - Canvas */}
-          <ResizablePanel defaultSize={40} minSize={30}>
-            <DiagramCanvas />
-          </ResizablePanel>
+          {mainLayout.middle && (
+            <ResizablePanel defaultSize={mainLayout.sizes.middle} minSize={30}>
+              <DiagramCanvas />
+            </ResizablePanel>
+          )}
 
-          <ResizableHandle />
+          {(mainLayout.left || mainLayout.middle) && mainLayout.right && <ResizableHandle />}
 
           {/* Right Panel - Calendar and Chat */}
-          <ResizablePanel defaultSize={35} minSize={25}>
-            <ResizablePanelGroup direction="vertical">
-              <ResizablePanel defaultSize={40} minSize={30}>
+          {mainLayout.right && (
+            <ResizablePanel defaultSize={mainLayout.sizes.right} minSize={25}>
+              {showCalendar && showChat ? (
+                <ResizablePanelGroup direction="vertical">
+                  <ResizablePanel defaultSize={40} minSize={30}>
+                    <DeadlineCalendar />
+                  </ResizablePanel>
+
+                  <ResizableHandle />
+
+                  <ResizablePanel defaultSize={60} minSize={40}>
+                    <ChatBot />
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              ) : showCalendar ? (
                 <DeadlineCalendar />
-              </ResizablePanel>
-
-              <ResizableHandle />
-
-              <ResizablePanel defaultSize={60} minSize={40}>
+              ) : (
                 <ChatBot />
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </ResizablePanel>
+              )}
+            </ResizablePanel>
+          )}
         </ResizablePanelGroup>
       </div>
     </div>
