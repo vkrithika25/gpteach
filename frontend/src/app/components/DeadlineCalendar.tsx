@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import * as React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Calendar, CheckCircle2, Circle, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { useProjects } from '../contexts/ProjectContext';
 
 interface Deadline {
   id: string;
@@ -14,50 +16,14 @@ interface Deadline {
 }
 
 export function DeadlineCalendar() {
-  const [deadlines, setDeadlines] = useState<Deadline[]>([
-    {
-      id: '1',
-      title: 'Initial Design Document',
-      date: 'Mar 15, 2026',
-      completed: false,
-      color: 'bg-blue-500',
-    },
-    {
-      id: '2',
-      title: 'DHT Implementation',
-      date: 'Mar 22, 2026',
-      completed: false,
-      color: 'bg-purple-500',
-    },
-    {
-      id: '3',
-      title: 'Replication Strategy',
-      date: 'Mar 29, 2026',
-      completed: false,
-      color: 'bg-green-500',
-    },
-    {
-      id: '4',
-      title: 'Consistency Model',
-      date: 'Apr 5, 2026',
-      completed: false,
-      color: 'bg-orange-500',
-    },
-    {
-      id: '5',
-      title: 'Testing & Documentation',
-      date: 'Apr 12, 2026',
-      completed: false,
-      color: 'bg-red-500',
-    },
-    {
-      id: '6',
-      title: 'Final Submission',
-      date: 'Apr 19, 2026',
-      completed: false,
-      color: 'bg-pink-500',
-    },
-  ]);
+  const { currentProject } = useProjects();
+
+  const storageKey = useMemo(() => {
+    const projectId = currentProject?.id ?? 'unknown-project';
+    return `gpteach:timeline:v1:${projectId}`;
+  }, [currentProject?.id]);
+
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -76,6 +42,33 @@ export function DeadlineCalendar() {
     'bg-yellow-500',
     'bg-cyan-500',
   ];
+
+  // Load persisted timeline whenever the project changes.
+  useEffect(() => {
+    if (!currentProject) return;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        setDeadlines([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as Deadline[];
+      setDeadlines(Array.isArray(parsed) ? parsed : []);
+    } catch (e) {
+      console.warn('Failed to load timeline:', e);
+      setDeadlines([]);
+    }
+  }, [currentProject, storageKey]);
+
+  // Persist all timeline state (including completion) on change.
+  useEffect(() => {
+    if (!currentProject) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(deadlines));
+    } catch (e) {
+      console.warn('Failed to persist timeline:', e);
+    }
+  }, [deadlines, currentProject, storageKey]);
 
   const toggleDeadline = (id: string) => {
     setDeadlines(deadlines.map(d => 

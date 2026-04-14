@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import canvas, health, sessions, teach, spec_format
+from app.api.routes import canvas, health, sessions, teach, spec_format, timeline
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.logging import logger
@@ -36,3 +36,4 @@ app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(teach.router, prefix="/api/v1")
 app.include_router(spec_format.router, prefix="/api/v1")
 app.include_router(canvas.router, prefix="/api/v1")
+app.include_router(timeline.router, prefix="/api/v1")

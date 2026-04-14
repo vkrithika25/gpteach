@@ -107,3 +107,20 @@ export function getCanvasFeedback(payload: CanvasFeedbackRequestPayload) {
     body: JSON.stringify(payload),
   });
 }
+
+// --- Timeline ---
+
+export interface GenerateTimelineRequestPayload {
+  spec_text: string;
+}
+
+export interface GenerateTimelineResponse {
+  tasks: Array<{ title: string; date: string }>;
+}
+
+export function generateTimeline(payload: GenerateTimelineRequestPayload) {
+  return request<GenerateTimelineResponse>('/timeline/generate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

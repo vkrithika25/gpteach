@@ -197,3 +197,49 @@ def generate_canvas_feedback(*, session: Session, image_data_url: str, student_p
     )
 
     return response.output_text or ""
+
+
+def generate_timeline_from_spec(spec_text: str):
+    """
+    Generate a concise set of timeline tasks based on a project spec.
+    """
+    import json
+
+    client = get_client()
+
+    instructions = (
+        "You generate a project timeline from a project specification.\n"
+        "Return ONLY valid JSON with this exact shape:\n"
+        '{ "tasks": [ { "title": string, "date": string } ] }\n'
+        "\nRules:\n"
+        "- Do NOT invent requirements not in the spec.\n"
+        "- Prefer concrete milestones from the spec (parts, deliverables, checkpoints).\n"
+        "- If the spec contains explicit due dates, use them.\n"
+        "- If no due dates are present, use milestone labels like 'Week 1', 'Week 2', ...\n"
+        "- Produce 5–10 tasks.\n"
+        "- Titles should be short and actionable.\n"
+    )
+
+    response = client.responses.create(
+        model=settings.openai_model,
+        input=[
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": spec_text},
+        ],
+        temperature=0.2,
+        store=False,
+    )
+
+    raw = (response.output_text or "").strip()
+    data = json.loads(raw)
+    tasks = data.get("tasks", [])
+
+    # Validate minimal shape.
+    cleaned = []
+    for t in tasks:
+        title = str(t.get("title", "")).strip()
+        date = str(t.get("date", "")).strip()
+        if title and date:
+            cleaned.append({"title": title, "date": date})
+
+    return cleaned[:10]

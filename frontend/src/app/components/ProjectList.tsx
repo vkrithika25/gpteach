@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { formatSpecMarkdown } from '../lib/api';
+import { formatSpecMarkdown, generateTimeline } from '../lib/api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -141,11 +141,38 @@ export function ProjectList() {
     }
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!pendingFile || !projectName.trim()) return;
 
     try {
       const newProject = addProject(projectName.trim(), pendingFile.content);
+
+      // Generate and persist a timeline from the spec (best-effort).
+      try {
+        const resp = await generateTimeline({ spec_text: pendingFile.content });
+        const colors = [
+          'bg-blue-500',
+          'bg-purple-500',
+          'bg-green-500',
+          'bg-orange-500',
+          'bg-red-500',
+          'bg-pink-500',
+          'bg-yellow-500',
+          'bg-cyan-500',
+        ];
+        const deadlines = (resp.tasks ?? []).slice(0, 10).map((t, idx) => ({
+          id: `${Date.now()}-${idx}`,
+          title: t.title,
+          date: t.date,
+          completed: false,
+          color: colors[idx % colors.length],
+        }));
+        localStorage.setItem(`gpteach:timeline:v1:${newProject.id}`, JSON.stringify(deadlines));
+      } catch (e) {
+        console.warn('Failed to generate timeline; using default empty timeline.', e);
+        localStorage.setItem(`gpteach:timeline:v1:${newProject.id}`, JSON.stringify([]));
+      }
+
       setShowNameDialog(false);
       setPendingFile(null);
       setProjectName('');
