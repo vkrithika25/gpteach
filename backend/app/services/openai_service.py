@@ -173,6 +173,7 @@ def generate_canvas_feedback(*, session: Session, image_data_url: str, student_p
         "- Do not provide full solutions or full code; focus on improving clarity/correctness.\n"
         "- If parts are unreadable, say what you cannot infer.\n"
         "- Output Markdown with short sections and bullet points.\n"
+        "- Do not ask the student to type follow up questions/answers, they are not able to do so"
     )
 
     if student_prompt:
@@ -216,7 +217,7 @@ def generate_timeline_from_spec(spec_text: str):
         "- Prefer concrete milestones from the spec (parts, deliverables, checkpoints).\n"
         "- If the spec contains explicit due dates, use them.\n"
         "- If no due dates are present, use milestone labels like 'Week 1', 'Week 2', ...\n"
-        "- Produce 5–10 tasks.\n"
+        "- Produce 6-8 tasks.\n"
         "- Titles should be short and actionable.\n"
     )
 
