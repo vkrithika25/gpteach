@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import canvas, health, sessions, teach, spec_format, timeline
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import Base, engine, ensure_sqlite_schema
 from app.core.logging import logger
 
 
@@ -13,6 +13,7 @@ from app.core.logging import logger
 async def lifespan(app: FastAPI):
     logger.info("Creating database tables")
     Base.metadata.create_all(bind=engine)
+    ensure_sqlite_schema()
     yield
 
 

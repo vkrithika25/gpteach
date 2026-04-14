@@ -1,5 +1,6 @@
 from app.models.session import Session
 from app.schemas.common import StudentUnderstandingLevel
+from app.schemas.student_model import StudentProfile
 from app.schemas.teach import ContextMessage
 
 SYSTEM_PROMPT = """\
@@ -76,11 +77,38 @@ def build_system_prompt(
 
 
 def build_session_context(session: Session) -> str:
+    import json
+
     lines = ["--- Project Context ---"]
     if session.assignment_name:
         lines.append(f"Assignment: {session.assignment_name}")
     if session.course_context:
         lines.append(f"Course: {session.course_context}")
+
+    # Persistent student model (best-effort; empty if not yet built).
+    try:
+        profile = StudentProfile.model_validate(json.loads(getattr(session, "student_profile_json", "{}") or "{}"))
+    except Exception:
+        profile = StudentProfile()
+
+    if (
+        profile.summary
+        or profile.strengths
+        or profile.confusions
+        or profile.preferences
+        or getattr(session, "student_understanding", "unknown") != "unknown"
+    ):
+        lines.append("\n--- Student Model (Persistent) ---")
+        lines.append(f"Understanding: {getattr(session, 'student_understanding', 'unknown')}")
+        if profile.summary:
+            lines.append(f"Summary: {profile.summary}")
+        if profile.strengths:
+            lines.append("Strengths: " + "; ".join(profile.strengths))
+        if profile.confusions:
+            lines.append("Confusions: " + "; ".join(profile.confusions))
+        if profile.preferences:
+            lines.append("Preferences: " + "; ".join(profile.preferences))
+
     lines.append(f"\n--- Project Specification ---\n{session.project_spec_text}")
     return "\n".join(lines)
 

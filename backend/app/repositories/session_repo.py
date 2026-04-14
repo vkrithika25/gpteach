@@ -45,3 +45,20 @@ def update_session(
     db.commit()
     db.refresh(session)
     return session
+
+
+def update_student_model(
+    db: DBSession,
+    session: Session,
+    *,
+    student_understanding: str | None = None,
+    student_profile_json: str | None = None,
+) -> Session:
+    if student_understanding is not None:
+        session.student_understanding = student_understanding
+    if student_profile_json is not None:
+        session.student_profile_json = student_profile_json
+    session.updated_at = utcnow()
+    db.commit()
+    db.refresh(session)
+    return session

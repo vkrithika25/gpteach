@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.models.session import Session
 from app.schemas.common import StudentUnderstandingLevel
+from app.schemas.student_model import StudentProfile
 from app.schemas.teach import ContextMessage, TeachResponse
 from app.services.prompt_builder import build_messages
 from app.services.teaching_guardrails import classify_guidance_level, should_ask_to_explain
@@ -63,6 +64,136 @@ def set_client(client: OpenAI) -> None:
     """Allow injecting a client for testing."""
     global _client
     _client = client
+
+
+def _safe_parse_student_profile(raw: str) -> StudentProfile:
+    import json
+
+    try:
+        data = json.loads(raw or "{}")
+        return StudentProfile.model_validate(data)
+    except Exception:
+        return StudentProfile()
+
+
+def _merge_unique(existing: list[str], incoming: list[str], limit: int) -> list[str]:
+    seen = set()
+    out: list[str] = []
+    for x in existing + incoming:
+        s = str(x).strip()
+        if not s:
+            continue
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _build_student_model_block(session: Session) -> str:
+    import json
+
+    try:
+        profile = StudentProfile.model_validate(json.loads(getattr(session, "student_profile_json", "{}") or "{}"))
+    except Exception:
+        profile = StudentProfile()
+
+    understanding = getattr(session, "student_understanding", "unknown")
+
+    if not (
+        profile.summary
+        or profile.strengths
+        or profile.confusions
+        or profile.preferences
+        or understanding != "unknown"
+    ):
+        return ""
+
+    lines = ["--- Student Model (Persistent) ---", f"Understanding: {understanding}"]
+    if profile.summary:
+        lines.append(f"Summary: {profile.summary}")
+    if profile.strengths:
+        lines.append("Strengths: " + "; ".join(profile.strengths))
+    if profile.confusions:
+        lines.append("Confusions: " + "; ".join(profile.confusions))
+    if profile.preferences:
+        lines.append("Preferences: " + "; ".join(profile.preferences))
+    return "\n".join(lines)
+
+
+def update_student_profile_from_message(
+    *,
+    session: Session,
+    student_message: str,
+    recent_context: list[ContextMessage],
+) -> StudentProfile:
+    """
+    Best-effort update of a persistent StudentProfile based on the latest student message.
+    Returns the updated profile (caller persists it).
+    """
+    import json
+
+    client = get_client()
+
+    prior = _safe_parse_student_profile(getattr(session, "student_profile_json", "{}"))
+
+    # Keep context small: last few turns only.
+    context_lines: list[str] = []
+    for msg in recent_context[-6:]:
+        role = "assistant" if msg.role == "assistant" else "student"
+        context_lines.append(f"{role}: {msg.content}".strip())
+    context_block = "\n".join(context_lines).strip()
+
+    instructions = (
+        "You maintain a compact student profile for a tutoring session.\n"
+        "Update the profile based on the latest student message and recent context.\n"
+        "Return ONLY valid JSON with this exact schema:\n"
+        "{\n"
+        '  "understanding": "low"|"medium"|"high"|"unknown",\n'
+        '  "strengths": string[],\n'
+        '  "confusions": string[],\n'
+        '  "preferences": string[],\n'
+        '  "summary": string\n'
+        "}\n"
+        "Rules:\n"
+        "- Be conservative: do not over-infer.\n"
+        "- Keep each list short (<=5 items).\n"
+        "- summary <= 250 chars.\n"
+    )
+
+    user_payload = {
+        "prior_profile": prior.model_dump(),
+        "recent_context": context_block,
+        "latest_student_message": student_message,
+    }
+
+    response = client.responses.create(
+        model=settings.openai_model,
+        input=[
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": json.dumps(user_payload)},
+        ],
+        temperature=0.2,
+        store=False,
+    )
+
+    raw = (response.output_text or "").strip()
+    data = json.loads(raw)
+    proposed = StudentProfile.model_validate(data)
+
+    # Merge (prefer accumulating evidence over time).
+    merged = StudentProfile(
+        understanding=proposed.understanding or prior.understanding,
+        strengths=_merge_unique(prior.strengths, proposed.strengths, 5),
+        confusions=_merge_unique(prior.confusions, proposed.confusions, 5),
+        preferences=_merge_unique(prior.preferences, proposed.preferences, 5),
+        summary=(proposed.summary or prior.summary or "")[:250],
+    )
+
+    return merged
 
 
 def generate_teaching_response(
@@ -181,6 +312,10 @@ def generate_canvas_feedback(*, session: Session, image_data_url: str, student_p
 
     # Provide spec context to align feedback with assignment terms.
     prompt += "\nProject spec context (verbatim):\n" + session.project_spec_text
+
+    student_model_block = _build_student_model_block(session)
+    if student_model_block:
+        prompt += "\n\n" + student_model_block
 
     response = client.responses.create(
         model=settings.openai_model,

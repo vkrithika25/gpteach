@@ -16,5 +16,8 @@ class Session(Base):
     course_context: Mapped[str | None] = mapped_column(String, nullable=True)
     assignment_name: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="active")
+    # Persistent student model ("Option A"): updated incrementally over time.
+    student_understanding: Mapped[str] = mapped_column(String, default="unknown")
+    student_profile_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
