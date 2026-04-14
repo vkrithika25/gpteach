@@ -88,3 +88,22 @@ export function formatSpecMarkdown(payload: FormatSpecRequestPayload) {
     body: JSON.stringify(payload),
   });
 }
+
+// --- Canvas feedback ---
+
+export interface CanvasFeedbackRequestPayload {
+  session_id: string;
+  image_data_url: string;
+  prompt?: string;
+}
+
+export interface CanvasFeedbackResponse {
+  feedback_markdown: string;
+}
+
+export function getCanvasFeedback(payload: CanvasFeedbackRequestPayload) {
+  return request<CanvasFeedbackResponse>('/canvas/feedback', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

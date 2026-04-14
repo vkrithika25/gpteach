@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import * as React from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Send, Bot, User } from "lucide-react";
@@ -16,15 +17,24 @@ interface ChatMessage {
 }
 
 export function ChatBot() {
-  const { backendSessionId } = useProjects();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "1",
+  const { backendSessionId, currentProject } = useProjects();
+
+  const greetingMessage: ChatMessage = useMemo(
+    () => ({
+      id: "greeting",
       sender: "bot",
       text: "Hi! I'm GPTeach — I'm here to help you understand your project specification. I won't give you the answers, but I'll help you think through the problem. What would you like to explore?",
       timestamp: new Date(),
-    },
-  ]);
+    }),
+    [],
+  );
+
+  const chatStorageKey = useMemo(() => {
+    const projectId = currentProject?.id ?? "unknown-project";
+    return `gpteach:chat:v1:${projectId}`;
+  }, [currentProject?.id]);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([greetingMessage]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -38,6 +48,48 @@ export function ChatBot() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load persisted chat when switching projects.
+  useEffect(() => {
+    if (!currentProject) return;
+    try {
+      const raw = localStorage.getItem(chatStorageKey);
+      if (!raw) {
+        setMessages([greetingMessage]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as Array<Omit<ChatMessage, "timestamp"> & { timestamp: string }>;
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        setMessages([greetingMessage]);
+        return;
+      }
+
+      setMessages(
+        parsed.map((m) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        })),
+      );
+    } catch (e) {
+      console.warn("Failed to load persisted chat:", e);
+      setMessages([greetingMessage]);
+    }
+  }, [chatStorageKey, currentProject, greetingMessage]);
+
+  // Persist chat as it changes (cap history to avoid huge localStorage writes).
+  useEffect(() => {
+    if (!currentProject) return;
+    try {
+      const capped = messages.slice(-200).map((m) => ({
+        ...m,
+        timestamp: m.timestamp.toISOString(),
+      }));
+      localStorage.setItem(chatStorageKey, JSON.stringify(capped));
+    } catch (e) {
+      console.warn("Failed to persist chat:", e);
+    }
+  }, [messages, chatStorageKey, currentProject]);
 
   const buildRecentContext = (): ContextMessage[] => {
     // Send the last 10 messages as context (skip the initial greeting)

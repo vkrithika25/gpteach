@@ -158,3 +158,42 @@ def format_spec_to_markdown(text: str) -> tuple[str, bool]:
         md = text
 
     return md, preserved
+
+
+def generate_canvas_feedback(*, session: Session, image_data_url: str, student_prompt: str | None) -> str:
+    """
+    Provide feedback on a student's flow diagram (image) in Markdown.
+    """
+    client = get_client()
+
+    prompt = (
+        "You are a teaching assistant. Give feedback on the student's flow diagram.\n"
+        "Constraints:\n"
+        "- Be constructive and specific.\n"
+        "- Do not provide full solutions or full code; focus on improving clarity/correctness.\n"
+        "- If parts are unreadable, say what you cannot infer.\n"
+        "- Output Markdown with short sections and bullet points.\n"
+    )
+
+    if student_prompt:
+        prompt += f"\nStudent question/context:\n{student_prompt.strip()}\n"
+
+    # Provide spec context to align feedback with assignment terms.
+    prompt += "\nProject spec context (verbatim):\n" + session.project_spec_text
+
+    response = client.responses.create(
+        model=settings.openai_model,
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {"type": "input_image", "image_url": image_data_url},
+                ],
+            }
+        ],
+        temperature=0.3,
+        store=False,
+    )
+
+    return response.output_text or ""
