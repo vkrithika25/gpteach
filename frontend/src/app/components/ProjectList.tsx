@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { formatSpecMarkdown } from '../lib/api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,8 +89,17 @@ export function ProjectList() {
                 return line;
               })
               .join('\n');
-            
-            setPendingFile({ name: defaultName, content: processedText.trim() });
+
+            // Ask backend/OpenAI to format into Markdown (verbatim words).
+            let formatted = processedText.trim();
+            try {
+              const resp = await formatSpecMarkdown({ text: formatted });
+              formatted = resp.markdown;
+            } catch (e) {
+              console.warn('Failed to format spec as markdown, using extracted text.', e);
+            }
+
+            setPendingFile({ name: defaultName, content: formatted });
             setProjectName(defaultName);
             setShowNameDialog(true);
             setUploading(false);

@@ -11,6 +11,47 @@ from app.services.teaching_guardrails import classify_guidance_level, should_ask
 _client: OpenAI | None = None
 
 
+def _normalize_whitespace(s: str) -> str:
+    return " ".join(s.replace("\r\n", "\n").replace("\r", "\n").split())
+
+
+def _markdown_to_visible_text(md: str) -> str:
+    """
+    Best-effort "visible text" extraction to detect paraphrasing.
+    We purposely bias prompts so links use URL-as-text: [URL](URL),
+    which preserves raw URLs in visible text.
+    """
+    import re
+
+    s = md
+
+    # Remove fenced code block markers but keep content.
+    s = re.sub(r"^```[^\n]*\n", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^```\s*$", "", s, flags=re.MULTILINE)
+
+    # Inline code: keep content.
+    s = re.sub(r"`([^`]+)`", r"\1", s)
+
+    # Images: keep alt text if present.
+    s = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", s)
+
+    # Links: keep the bracket text.
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
+
+    # Strip common emphasis markers.
+    s = s.replace("**", "").replace("__", "").replace("*", "").replace("_", "")
+
+    # Strip headings/blockquote markers at line start.
+    s = re.sub(r"^\s{0,3}#{1,6}\s+", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^\s{0,3}>\s?", "", s, flags=re.MULTILINE)
+
+    # Strip list markers at line start.
+    s = re.sub(r"^\s*[-+*]\s+", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^\s*\d+\.\s+", "", s, flags=re.MULTILINE)
+
+    return s
+
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -76,3 +117,44 @@ def generate_teaching_response(
         follow_up_questions=follow_ups[:3],
         should_ask_student_to_explain=ask_to_explain,
     )
+
+
+def format_spec_to_markdown(text: str) -> tuple[str, bool]:
+    """
+    Format spec text into readable Markdown WITHOUT changing words.
+    Returns (markdown, preserved) where preserved is a best-effort check.
+    """
+    client = get_client()
+
+    instructions = (
+        "You are a formatting tool. Convert the provided spec text into Markdown.\n"
+        "CRITICAL CONSTRAINTS:\n"
+        "- Do NOT change, add, remove, or reorder words or characters from the spec.\n"
+        "- You may ONLY insert Markdown syntax and whitespace/newlines for formatting.\n"
+        "- Preserve all URLs exactly; if you make a link, use the URL as the link text: [URL](URL).\n"
+        "- Preserve code exactly; use fenced code blocks when appropriate.\n"
+        "- Output ONLY the Markdown. No preface.\n"
+    )
+
+    response = client.responses.create(
+        model=settings.openai_model,
+        input=[
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": text},
+        ],
+        temperature=0.0,
+        store=False,
+    )
+
+    md = response.output_text or ""
+
+    # Best-effort preservation check: compare normalized visible text.
+    original_norm = _normalize_whitespace(text)
+    md_visible_norm = _normalize_whitespace(_markdown_to_visible_text(md))
+    preserved = original_norm == md_visible_norm
+
+    # If not preserved, fall back to original (still viewable; no paraphrasing risk).
+    if not preserved:
+        md = text
+
+    return md, preserved

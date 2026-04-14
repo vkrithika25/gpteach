@@ -70,3 +70,21 @@ export function teachRespond(payload: TeachRequestPayload) {
     body: JSON.stringify(payload),
   });
 }
+
+// --- Spec formatting ---
+
+export interface FormatSpecRequestPayload {
+  text: string;
+}
+
+export interface FormatSpecResponse {
+  markdown: string;
+  preserved: boolean;
+}
+
+export function formatSpecMarkdown(payload: FormatSpecRequestPayload) {
+  return request<FormatSpecResponse>('/spec/format-markdown', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
