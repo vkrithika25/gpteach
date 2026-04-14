@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
@@ -10,6 +11,7 @@ import remarkGfm from 'remark-gfm';
 
 interface Annotation {
   id: string;
+  type: 'ai' | 'note';
   question: string;
   answer: string;
   highlightedText: string;
@@ -31,12 +33,156 @@ export function SpecViewer() {
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
   const [showQuestionBox, setShowQuestionBox] = useState(false);
   const [questionBoxPosition, setQuestionBoxPosition] = useState({ top: 0, left: 0 });
+  const [composeMode, setComposeMode] = useState<'ask' | 'note'>('ask');
   const [question, setQuestion] = useState('');
+  const [note, setNote] = useState('');
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedAnnotation, setSelectedAnnotation] = useState<Annotation | null>(null);
   const [annotationPopupPosition, setAnnotationPopupPosition] = useState({ top: 0, left: 0 });
   const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const specRef = useRef<HTMLDivElement>(null);
+
+  const storageKey = React.useMemo(() => {
+    const projectId = currentProject?.id ?? 'unknown-project';
+    return `gpteach:specviewer:annotations:v1:${projectId}`;
+  }, [currentProject?.id]);
+
+  const saveAnnotations = React.useCallback(
+    (next: Annotation[]) => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch (e) {
+        console.warn('Failed to persist annotations:', e);
+      }
+    },
+    [storageKey],
+  );
+
+  const wrapRangeWithMark = (range: Range, mark: HTMLElement) => {
+    // More robust than surroundContents across multiple text nodes.
+    const contents = range.extractContents();
+    mark.appendChild(contents);
+    range.insertNode(mark);
+  };
+
+  const getGlobalOffsetsForRange = (root: HTMLElement, range: Range) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let index = 0;
+    let start: number | null = null;
+    let end: number | null = null;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const node = walker.nextNode() as Text | null;
+      if (!node) break;
+
+      if (node === range.startContainer) start = index + range.startOffset;
+      if (node === range.endContainer) end = index + range.endOffset;
+
+      index += node.nodeValue?.length ?? 0;
+    }
+
+    if (start == null || end == null) return null;
+    return { start, end };
+  };
+
+  const getRangeFromGlobalOffsets = (root: HTMLElement, start: number, end: number) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let index = 0;
+    let startNode: Text | null = null;
+    let endNode: Text | null = null;
+    let startOffset = 0;
+    let endOffset = 0;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const node = walker.nextNode() as Text | null;
+      if (!node) break;
+      const len = node.nodeValue?.length ?? 0;
+
+      if (startNode == null && start <= index + len) {
+        startNode = node;
+        startOffset = Math.max(0, start - index);
+      }
+
+      if (endNode == null && end <= index + len) {
+        endNode = node;
+        endOffset = Math.max(0, end - index);
+      }
+
+      if (startNode && endNode) break;
+      index += len;
+    }
+
+    if (!startNode || !endNode) return null;
+    const range = document.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+    return range;
+  };
+
+  const applyAnnotationHighlight = (annotation: Annotation) => {
+    const root = specRef.current;
+    if (!root) return;
+    if (!annotation.startOffset && annotation.startOffset !== 0) return;
+    if (!annotation.endOffset && annotation.endOffset !== 0) return;
+    if (annotation.endOffset <= annotation.startOffset) return;
+
+    const existing = root.querySelector(`mark[data-annotation-id="${annotation.id}"]`);
+    if (existing) return;
+
+    const range = getRangeFromGlobalOffsets(root, annotation.startOffset, annotation.endOffset);
+    if (!range) return;
+
+    const mark = document.createElement('mark');
+    mark.className = `${annotation.color} text-zinc-100 cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+    mark.dataset.annotationId = annotation.id;
+
+    try {
+      wrapRangeWithMark(range, mark);
+    } catch (e) {
+      console.warn('Failed to restore highlight range:', e);
+      return;
+    }
+
+    const icon = document.createElement('span');
+    icon.innerHTML = annotation.type === 'ai' ? '💬' : '📝';
+    icon.className = 'inline-block ml-1 text-[10px]';
+    mark.appendChild(icon);
+
+    mark.onclick = (e) => {
+      e.stopPropagation();
+      handleAnnotationClick(annotation, e as unknown as ReactMouseEvent);
+    };
+  };
+
+  // Load persisted annotations when project changes.
+  useEffect(() => {
+    if (!currentProject) return;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        setAnnotations([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as Annotation[];
+      if (Array.isArray(parsed)) setAnnotations(parsed);
+    } catch (e) {
+      console.warn('Failed to load annotations:', e);
+      setAnnotations([]);
+    }
+  }, [currentProject, storageKey]);
+
+  // Re-apply highlights after render when annotations change.
+  useEffect(() => {
+    if (!specRef.current) return;
+    if (annotations.length === 0) return;
+
+    const id = window.requestAnimationFrame(() => {
+      annotations.forEach(applyAnnotationHighlight);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [annotations]);
 
   const colors = [
     'border-yellow-500',
@@ -54,6 +200,15 @@ export function SpecViewer() {
     'bg-purple-500/30 border-purple-500',
     'bg-pink-500/30 border-pink-500',
     'bg-orange-500/30 border-orange-500',
+  ];
+
+  const selectionBgByIndex = [
+    'rgba(234, 179, 8, 0.30)',  // yellow-500/30
+    'rgba(59, 130, 246, 0.30)', // blue-500/30
+    'rgba(34, 197, 94, 0.30)',  // green-500/30
+    'rgba(168, 85, 247, 0.30)', // purple-500/30
+    'rgba(236, 72, 153, 0.30)', // pink-500/30
+    'rgba(249, 115, 22, 0.30)', // orange-500/30
   ];
 
   const handleTextSelect = () => {
@@ -77,10 +232,36 @@ export function SpecViewer() {
           left: rect.left - specRect.left,
         });
         setShowQuestionBox(true);
+        setComposeMode('ask');
       }
+
+      // Clear the native browser selection highlight (which can render unreadable
+      // colors on dark backgrounds). We keep a cloned Range in state for later.
+      selection.removeAllRanges();
     } else {
       setShowQuestionBox(false);
     }
+  };
+
+  const createHighlight = (annotation: Annotation, colorIndex: number, iconEmoji: string) => {
+    if (!selectionInfo) return;
+
+    const span = document.createElement('mark');
+    // <mark> has a browser default `color: black`; override to keep text readable on dark UI.
+    span.className = `${highlightColors[colorIndex]} text-zinc-100 cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+    span.dataset.annotationId = annotation.id;
+
+    selectionInfo.range.surroundContents(span);
+
+    const icon = document.createElement('span');
+    icon.innerHTML = iconEmoji;
+    icon.className = 'inline-block ml-1 text-[10px]';
+    span.appendChild(icon);
+
+    span.onclick = (e) => {
+      e.stopPropagation();
+      handleAnnotationClick(annotation, e as unknown as ReactMouseEvent);
+    };
   };
 
   const handleAskQuestion = async () => {
@@ -90,6 +271,8 @@ export function SpecViewer() {
     const annotationId = Date.now().toString();
     const currentQuestion = question;
     const currentSelection = selectionInfo;
+    const root = specRef.current;
+    const offsets = root ? getGlobalOffsetsForRange(root, currentSelection.range) : null;
 
     setIsAsking(true);
 
@@ -100,48 +283,77 @@ export function SpecViewer() {
         want_hint_only: true,
       });
 
-      const span = document.createElement('mark');
-      span.className = `${highlightColors[colorIndex]} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
-      span.dataset.annotationId = annotationId;
-
       const newAnnotation: Annotation = {
         id: annotationId,
+        type: 'ai',
         question: currentQuestion,
         answer: response.assistant_message,
         highlightedText: currentSelection.text,
         color: highlightColors[colorIndex],
         borderColor: colors[colorIndex],
         sectionId: 'dynamic',
-        startOffset: 0,
-        endOffset: 0,
+        startOffset: offsets?.start ?? 0,
+        endOffset: offsets?.end ?? 0,
       };
 
-      currentSelection.range.surroundContents(span);
+      createHighlight(newAnnotation, colorIndex, '💬');
 
-      const icon = document.createElement('span');
-      icon.innerHTML = '\uD83D\uDCAC';
-      icon.className = 'inline-block ml-1 text-[10px]';
-      span.appendChild(icon);
-
-      span.onclick = (e) => {
-        e.stopPropagation();
-        handleAnnotationClick(newAnnotation, e as unknown as React.MouseEvent);
-      };
-
-      setAnnotations(prev => [...prev, newAnnotation]);
+      setAnnotations((prev) => {
+        const next = [...prev, newAnnotation];
+        saveAnnotations(next);
+        return next;
+      });
     } catch (e) {
       console.error('Failed to get answer:', e);
       alert('Could not get an answer. Make sure the backend is running.');
     } finally {
       setIsAsking(false);
       setQuestion('');
+      setNote('');
       setShowQuestionBox(false);
       setSelectionInfo(null);
       window.getSelection()?.removeAllRanges();
     }
   };
 
-  const handleAnnotationClick = (annotation: Annotation, event: React.MouseEvent) => {
+  const handleSaveNote = () => {
+    if (!note.trim() || !selectionInfo) return;
+
+    const colorIndex = selectedColorIndex;
+    const annotationId = Date.now().toString();
+    const currentNote = note;
+    const currentSelection = selectionInfo;
+    const root = specRef.current;
+    const offsets = root ? getGlobalOffsetsForRange(root, currentSelection.range) : null;
+
+    const newAnnotation: Annotation = {
+      id: annotationId,
+      type: 'note',
+      question: '',
+      answer: currentNote,
+      highlightedText: currentSelection.text,
+      color: highlightColors[colorIndex],
+      borderColor: colors[colorIndex],
+      sectionId: 'dynamic',
+      startOffset: offsets?.start ?? 0,
+      endOffset: offsets?.end ?? 0,
+    };
+
+    createHighlight(newAnnotation, colorIndex, '📝');
+    setAnnotations((prev) => {
+      const next = [...prev, newAnnotation];
+      saveAnnotations(next);
+      return next;
+    });
+
+    setNote('');
+    setQuestion('');
+    setShowQuestionBox(false);
+    setSelectionInfo(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const handleAnnotationClick = (annotation: Annotation, event: ReactMouseEvent) => {
     event.stopPropagation();
     if (specRef.current) {
       const specRect = specRef.current.getBoundingClientRect();
@@ -160,7 +372,10 @@ export function SpecViewer() {
     if (element) {
       const parent = element.parentNode;
       while (element.firstChild) {
-        if (element.firstChild.nodeType === Node.ELEMENT_NODE && (element.firstChild as HTMLElement).innerText === '💬') {
+        if (
+          element.firstChild.nodeType === Node.ELEMENT_NODE &&
+          ['💬', '📝'].includes((element.firstChild as HTMLElement).innerText)
+        ) {
           element.removeChild(element.firstChild);
         } else {
           parent?.insertBefore(element.firstChild, element);
@@ -168,7 +383,11 @@ export function SpecViewer() {
       }
       parent?.removeChild(element);
     }
-    setAnnotations(prev => prev.filter(a => a.id !== annotationId));
+    setAnnotations((prev) => {
+      const next = prev.filter((a) => a.id !== annotationId);
+      saveAnnotations(next);
+      return next;
+    });
     setSelectedAnnotation(null);
   };
 
@@ -177,7 +396,7 @@ export function SpecViewer() {
     
     const element = document.querySelector(`mark[data-annotation-id="${selectedAnnotation.id}"]`);
     if (element) {
-      element.className = `${highlightColors[colorIndex]} cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
+      element.className = `${highlightColors[colorIndex]} text-zinc-100 cursor-pointer rounded px-0.5 border-b-2 transition-opacity hover:opacity-80 relative inline-block`;
     }
 
     const updatedAnnotation = {
@@ -186,9 +405,11 @@ export function SpecViewer() {
       borderColor: colors[colorIndex],
     };
 
-    setAnnotations(prev => prev.map(a => 
-      a.id === selectedAnnotation.id ? updatedAnnotation : a
-    ));
+    setAnnotations((prev) => {
+      const next = prev.map((a) => (a.id === selectedAnnotation.id ? updatedAnnotation : a));
+      saveAnnotations(next);
+      return next;
+    });
     setSelectedAnnotation(updatedAnnotation);
   };
 
@@ -219,7 +440,15 @@ export function SpecViewer() {
         </div>
       </div>
       
-      <div ref={specRef} className="flex-1 overflow-auto p-6 relative bg-zinc-900 text-zinc-100" onMouseUp={handleTextSelect}>
+      <div
+        ref={specRef}
+        className="spec-selection flex-1 overflow-auto p-6 relative bg-zinc-900 text-zinc-100"
+        style={{
+          ['--spec-selection-bg' as unknown as string]: selectionBgByIndex[selectedColorIndex],
+          ['--spec-selection-fg' as unknown as string]: '#ffffff',
+        }}
+        onMouseUp={handleTextSelect}
+      >
         <div className="max-w-3xl prose prose-invert prose-zinc prose-sm sm:prose-base prose-headings:text-zinc-50 prose-p:text-zinc-300 prose-strong:text-zinc-100 prose-ul:text-zinc-300 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline">
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
@@ -248,22 +477,65 @@ export function SpecViewer() {
           >
             <Card className="p-4 shadow-lg bg-zinc-800 border-zinc-700">
               <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setComposeMode('ask')}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                      composeMode === 'ask'
+                        ? 'bg-zinc-900 border-zinc-600 text-zinc-100'
+                        : 'bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-900/50'
+                    }`}
+                  >
+                    Ask AI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setComposeMode('note')}
+                    className={`text-xs px-2 py-1 rounded border transition-colors ${
+                      composeMode === 'note'
+                        ? 'bg-zinc-900 border-zinc-600 text-zinc-100'
+                        : 'bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-900/50'
+                    }`}
+                  >
+                    Note
+                  </button>
+                  <div className="ml-auto text-[11px] text-zinc-500">
+                    {composeMode === 'ask' ? 'AI annotation' : 'Local note'}
+                  </div>
+                </div>
                 <p className="text-xs text-zinc-400">
                   Selected: "{selectionInfo?.text.slice(0, 50)}..."
                 </p>
-                <Textarea
-                  placeholder="Ask a question about this section..."
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  className="min-h-20 bg-zinc-900 border-zinc-700 text-zinc-100"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleAskQuestion();
-                    }
-                  }}
-                  autoFocus
-                />
+                {composeMode === 'ask' ? (
+                  <Textarea
+                    placeholder="Ask a question about this section..."
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    className="min-h-20 bg-zinc-900 border-zinc-700 text-zinc-100"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAskQuestion();
+                      }
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <Textarea
+                    placeholder="Write a note about this section..."
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="min-h-20 bg-zinc-900 border-zinc-700 text-zinc-100"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSaveNote();
+                      }
+                    }}
+                    autoFocus
+                  />
+                )}
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-zinc-400 mr-1">Color:</span>
@@ -282,14 +554,23 @@ export function SpecViewer() {
                     })}
                   </div>
                   <div className="flex gap-2 ml-auto">
-                    <Button onClick={handleAskQuestion} size="sm" disabled={isAsking}>
-                      {isAsking ? <Loader2 className="size-4 mr-1 animate-spin" /> : <Send className="size-4 mr-1" />}
-                      {isAsking ? 'Asking...' : 'Ask'}
-                    </Button>
+                    {composeMode === 'ask' ? (
+                      <Button onClick={handleAskQuestion} size="sm" disabled={isAsking || !question.trim()}>
+                        {isAsking ? <Loader2 className="size-4 mr-1 animate-spin" /> : <Send className="size-4 mr-1" />}
+                        {isAsking ? 'Asking...' : 'Ask'}
+                      </Button>
+                    ) : (
+                      <Button onClick={handleSaveNote} size="sm" disabled={!note.trim()}>
+                        <Send className="size-4 mr-1" />
+                        Save
+                      </Button>
+                    )}
                     <Button 
                       onClick={() => {
                         setShowQuestionBox(false);
                         setSelectionInfo(null);
+                        setQuestion('');
+                        setNote('');
                         window.getSelection()?.removeAllRanges();
                       }} 
                       size="sm" 
@@ -319,7 +600,7 @@ export function SpecViewer() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="size-6 p-0 hover:bg-red-900/50 hover:text-red-400"
+                      className="size-6 p-0 text-zinc-200 hover:bg-red-900/50 hover:text-red-300"
                       onClick={() => handleDeleteAnnotation(selectedAnnotation.id)}
                       title="Delete annotation"
                     >
@@ -328,7 +609,7 @@ export function SpecViewer() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="size-6 p-0"
+                      className="size-6 p-0 text-zinc-200 hover:bg-zinc-700/60 hover:text-zinc-50"
                       onClick={() => setSelectedAnnotation(null)}
                       title="Close"
                     >
@@ -337,15 +618,23 @@ export function SpecViewer() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-zinc-400">QUESTION</p>
-                  <p className="text-sm text-zinc-100">{selectedAnnotation.question}</p>
+                  {selectedAnnotation.type === 'ai' ? (
+                    <>
+                      <p className="text-xs font-medium text-zinc-400">QUESTION</p>
+                      <p className="text-sm text-zinc-100">{selectedAnnotation.question}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs font-medium text-zinc-400">NOTE</p>
+                      <p className="text-sm text-zinc-100">Personal note</p>
+                    </>
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-zinc-400">AI ANSWER</p>
-                  <p className="text-sm text-zinc-200 leading-relaxed">{selectedAnnotation.answer}</p>
-                </div>
-                <div className="pt-2 border-t border-zinc-700">
-                  <p className="text-xs text-zinc-500 italic">"{selectedAnnotation.highlightedText}"</p>
+                  <p className="text-xs font-medium text-zinc-400">
+                    {selectedAnnotation.type === 'ai' ? 'AI ANSWER' : 'NOTE'}
+                  </p>
+                  <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{selectedAnnotation.answer}</p>
                 </div>
                 <div className="pt-2 border-t border-zinc-700">
                   <div className="flex items-center gap-1">

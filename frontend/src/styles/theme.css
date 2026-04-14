@@ -128,6 +128,24 @@
     @apply bg-background text-foreground;
   }
 
+  /* Spec viewer: make drag-to-select highlight match chosen highlighter color */
+  .spec-selection::selection,
+  .spec-selection *::selection,
+  .spec-selection ::selection {
+    background-color: var(--spec-selection-bg);
+    color: var(--spec-selection-fg, #ffffff);
+    -webkit-text-fill-color: var(--spec-selection-fg, #ffffff);
+    text-shadow: none;
+  }
+
+  .spec-selection::-moz-selection,
+  .spec-selection *::-moz-selection,
+  .spec-selection ::-moz-selection {
+    background-color: var(--spec-selection-bg);
+    color: var(--spec-selection-fg, #ffffff);
+    text-shadow: none;
+  }
+
   /**
   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
   * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.

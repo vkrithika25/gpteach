@@ -9,3 +9,4 @@ backend/__pycache__/
 backend/**/__pycache__/
 *.pyc
 test_gpteach.db
+venv/

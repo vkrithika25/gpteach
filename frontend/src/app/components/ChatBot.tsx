@@ -5,6 +5,8 @@ import { Send, Bot, User } from "lucide-react";
 import { Card } from "./ui/card";
 import { useProjects } from "../contexts/ProjectContext";
 import { teachRespond, ContextMessage } from "../lib/api";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatMessage {
   id: string;
@@ -19,7 +21,7 @@ export function ChatBot() {
     {
       id: "1",
       sender: "bot",
-      text: "Hi! I'm GpTeach — I'm here to help you understand your project specification. I won't give you the answers, but I'll help you think through the problem. What would you like to explore?",
+      text: "Hi! I'm GPTeach — I'm here to help you understand your project specification. I won't give you the answers, but I'll help you think through the problem. What would you like to explore?",
       timestamp: new Date(),
     },
   ]);
@@ -124,9 +126,22 @@ export function ChatBot() {
                     : "bg-blue-950 border-blue-900"
                 }`}
               >
-                <p className="text-sm leading-relaxed text-zinc-100">
-                  {message.text}
-                </p>
+                {message.sender === "bot" ? (
+                  <div className="max-w-none prose prose-invert prose-zinc prose-sm prose-headings:text-zinc-50 prose-p:text-zinc-200 prose-strong:text-zinc-100 prose-ul:text-zinc-200 prose-ol:text-zinc-200 prose-li:my-0 prose-a:text-blue-300 prose-a:no-underline hover:prose-a:underline prose-pre:bg-zinc-900 prose-pre:text-zinc-100 prose-code:text-zinc-100">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a {...props} target="_blank" rel="noopener noreferrer" />
+                        ),
+                      }}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="text-sm leading-relaxed text-zinc-100 whitespace-pre-wrap">{message.text}</p>
+                )}
               </Card>
               <p className="text-xs text-zinc-500 mt-1 px-1">
                 {message.timestamp.toLocaleTimeString([], {

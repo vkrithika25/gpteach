@@ -7,7 +7,7 @@ import { SpecViewer } from './SpecViewer';
 import { DiagramCanvas } from './DiagramCanvas';
 import { DeadlineCalendar } from './DeadlineCalendar';
 import { ChatBot } from './ChatBot';
-import { GraduationCap, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export function ProjectWorkspace() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -58,22 +58,20 @@ export function ProjectWorkspace() {
   return (
     <div className="size-full flex flex-col bg-zinc-950">
       {/* Header */}
-      <header className="border-b border-zinc-800 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
-        <div className="flex items-center gap-3">
+      <div className="px-4 pt-4">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/')}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            className="p-2 rounded-md text-zinc-300 hover:text-zinc-100 hover:bg-zinc-900 transition-colors"
             aria-label="Back to projects"
           >
-            <ArrowLeft className="size-5" />
+            <ArrowLeft className="size-4" />
           </button>
-          <GraduationCap className="size-8" />
-          <div className="flex-1">
-            <h1 className="text-xl font-bold">{currentProject.name}</h1>
-            <p className="text-sm text-blue-100">Your intelligent companion for tackling complex projects</p>
-          </div>
+          <header className="inline-flex items-center rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5">
+            <h1 className="text-sm font-semibold text-zinc-100">{currentProject.name}</h1>
+          </header>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
